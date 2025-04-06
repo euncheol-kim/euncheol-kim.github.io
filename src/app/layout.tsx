@@ -9,6 +9,7 @@ import { ThemeProvider } from '@/layouts/theme/Provider';
 import { GoogleAnalytics, GoogleTagManager } from '@next/third-parties/google';
 import { Analytics } from '@vercel/analytics/react';
 import { SpeedInsights } from '@vercel/speed-insights/next';
+import { PostHogProvider } from '@/components/PostHogProvider';
 
 export const metadata: Metadata = {
   metadataBase: new URL(baseDomain),
@@ -37,16 +38,18 @@ export default function RootLayout({
   return (
     <html lang='en' className='h-full scroll-my-20 scroll-smooth' suppressHydrationWarning>
       <body className='font-pretendard flex min-h-screen flex-col'>
-        <ThemeProvider>
-          <Header />
-          <main className='mt-[64px] flex flex-1 flex-col'>{children}</main>
-          <Footer />
-        </ThemeProvider>
-        <Toaster />
-        <Analytics />
-        <SpeedInsights />
-        <GoogleAnalytics gaId='G-TRBVGE9TYP' />
-        <GoogleTagManager gtmId='G-TRBVGE9TYP' />
+        <PostHogProvider>
+          <ThemeProvider>
+            <Header />
+            <main className='mt-[64px] flex flex-1 flex-col'>{children}</main>
+            <Footer />
+          </ThemeProvider>
+          <Toaster />
+          <Analytics />
+          <SpeedInsights />
+          <GoogleAnalytics gaId='G-TRBVGE9TYP' />
+          <GoogleTagManager gtmId='G-TRBVGE9TYP' />
+        </PostHogProvider>
       </body>
     </html>
   );
