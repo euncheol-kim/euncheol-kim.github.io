@@ -12,14 +12,17 @@ const PostListPage = async ({ category }: PostListProps) => {
   const allPostCount = await getAllPostCount();
 
   return (
-    <section className='mx-auto mt-12 w-full max-w-[950px] px-4'>
-      <CategoryList
-        allPostCount={allPostCount}
-        categoryList={categoryList}
-        currentCategory={category}
-      />
+    <section className='mx-auto mt-8 w-full max-w-[1200px] px-4'>
+      <div className='mb-5 flex flex-wrap items-center gap-x-3 gap-y-2 pl-2 font-bold sm:pl-0'>
+        <h2 className='text-sm sm:text-base'>Category</h2>
+        <CategoryList
+          allPostCount={allPostCount}
+          categoryList={categoryList}
+          currentCategory={category}
+        />
+      </div>
       <section>
-        <ul className='grid grid-cols-1 gap-8 md:grid-cols-2 lg:gap-12'>
+        <ul className='grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 sm:gap-8 md:grid-cols-3 lg:gap-6'>
           {postList.map((post) => (
             <PostCard key={post.url + post.date} post={post} />
           ))}

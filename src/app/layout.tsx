@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 
+import { PostHogProvider } from '@/components/PostHogProvider';
 import { Toaster } from '@/components/ui/toaster';
 import { baseDomain, blogDesc, blogName, blogThumbnailURL } from '@/config/const';
 import '@/config/globals.css';
@@ -9,7 +10,6 @@ import { ThemeProvider } from '@/layouts/theme/Provider';
 import { GoogleAnalytics, GoogleTagManager } from '@next/third-parties/google';
 import { Analytics } from '@vercel/analytics/react';
 import { SpeedInsights } from '@vercel/speed-insights/next';
-import { PostHogProvider } from '@/components/PostHogProvider';
 
 export const metadata: Metadata = {
   metadataBase: new URL(baseDomain),
@@ -37,11 +37,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang='en' className='h-full scroll-my-20 scroll-smooth' suppressHydrationWarning>
-      <body className='font-pretendard flex min-h-screen flex-col'>
+      <body className='flex min-h-screen flex-col font-pretendard'>
         <PostHogProvider>
           <ThemeProvider>
             <Header />
-            <main className='mt-[64px] flex flex-1 flex-col'>{children}</main>
+            <main className='mt-[40px] flex flex-1 flex-col sm:mt-[64px]'>{children}</main>
             <Footer />
           </ThemeProvider>
           <Toaster />
