@@ -35,7 +35,7 @@ const CategoryList = ({
 
   return (
     <>
-      <section className='mb-5 hidden sm:block'>
+      <section className='hidden sm:block'>
         <ul className='flex flex-wrap gap-2'>
           <CategoryButton
             href='/blog'
@@ -54,7 +54,7 @@ const CategoryList = ({
           ))}
         </ul>
       </section>
-      <section className='mb-5 sm:hidden'>
+      <section className='sm:hidden'>
         <Select onValueChange={onCategoryChange} defaultValue={currentCategory}>
           <SelectTrigger className='h-auto w-[180px] py-1.5'>
             <SelectValue placeholder='Theme' />

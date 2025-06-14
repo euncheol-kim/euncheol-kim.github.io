@@ -13,11 +13,14 @@ const PostListPage = async ({ category }: PostListProps) => {
 
   return (
     <section className='mx-auto mt-8 w-full max-w-[1200px] px-4'>
-      <CategoryList
-        allPostCount={allPostCount}
-        categoryList={categoryList}
-        currentCategory={category}
-      />
+      <div className='mb-5 flex flex-wrap items-center gap-x-3 gap-y-2 font-bold'>
+        <h2>Category</h2>
+        <CategoryList
+          allPostCount={allPostCount}
+          categoryList={categoryList}
+          currentCategory={category}
+        />
+      </div>
       <section>
         <ul className='grid grid-cols-1 gap-8 sm:grid-cols-2 sm:gap-4 md:grid-cols-3 lg:gap-6'>
           {postList.map((post) => (
