@@ -13,7 +13,7 @@ const PostListPage = async ({ category }: PostListProps) => {
 
   return (
     <section className='mx-auto mt-8 w-full max-w-[1200px] px-4'>
-      <div className='mb-5 flex flex-wrap items-center gap-x-3 gap-y-2 font-bold'>
+      <div className='mb-5 flex flex-wrap items-center gap-x-3 gap-y-2 pl-2 font-bold sm:pl-0'>
         <h2 className='text-sm sm:text-base'>Category</h2>
         <CategoryList
           allPostCount={allPostCount}

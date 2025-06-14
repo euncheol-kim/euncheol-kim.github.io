@@ -19,7 +19,7 @@ const PostCard = ({ post }: Props) => {
           'hover:border-primary dark:hover:border-white'
         )}
       >
-        <div className='relative aspect-video w-1/3 rounded-t-md border-b sm:w-full'>
+        <div className='relative aspect-video w-1/3 rounded-t-md border-b max-[550px]:hidden sm:w-full'>
           <Image
             src={post.thumbnail}
             alt={`thumbnail for ${post.title}`}
