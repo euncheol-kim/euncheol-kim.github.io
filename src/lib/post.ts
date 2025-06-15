@@ -70,6 +70,12 @@ export const getPostList = async (category?: string): Promise<Post[]> => {
   return postList;
 };
 
+export const getHotPostList = async () => {
+  const postList = await getPostList();
+  const hotPostList = postList.filter((post) => post.isHot);
+  return sortPostList(hotPostList);
+};
+
 export const getSortedPostList = async (category?: string) => {
   const postList = await getPostList(category);
   return sortPostList(postList);
@@ -86,6 +92,7 @@ export const getSitemapPostList = async () => {
 };
 
 export const getAllPostCount = async () => (await getPostList()).length;
+export const getHotPostCount = async () => (await getHotPostList()).length;
 
 export const getCategoryList = () => {
   const cgPaths: string[] = sync(`${POSTS_PATH}/*`);
