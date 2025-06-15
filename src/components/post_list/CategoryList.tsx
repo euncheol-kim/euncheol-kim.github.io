@@ -48,7 +48,7 @@ const CategoryList = ({
               key={cg.dirName}
               href={`/blog/${cg.dirName}`}
               displayName={cg.publicName}
-              isCurrent={cg.dirName === currentCategory}
+              isCurrent={currentCategory === cg.dirName}
               count={cg.count}
             />
           ))}
