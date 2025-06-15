@@ -1,15 +1,17 @@
 import CategoryList from './CategoryList';
 import PostCard from './PostCard';
-import { getAllPostCount, getCategoryDetailList, getSortedPostList } from '@/lib/post';
+import { Post } from '@/config/types';
+import { getAllPostCount, getCategoryDetailList, getHotPostCount } from '@/lib/post';
 
 interface PostListProps {
+  postList: Post[];
   category?: string;
 }
 
-const PostListPage = async ({ category }: PostListProps) => {
-  const postList = await getSortedPostList(category);
+const PostListPage = async ({ category, postList }: PostListProps) => {
   const categoryList = await getCategoryDetailList();
   const allPostCount = await getAllPostCount();
+  const hotPostCount = await getHotPostCount();
 
   return (
     <section className='mx-auto mt-8 w-full max-w-[1200px] px-4'>
@@ -18,6 +20,7 @@ const PostListPage = async ({ category }: PostListProps) => {
         <CategoryList
           allPostCount={allPostCount}
           categoryList={categoryList}
+          hotPostCount={hotPostCount}
           currentCategory={category}
         />
       </div>

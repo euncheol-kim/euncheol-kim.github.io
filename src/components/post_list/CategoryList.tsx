@@ -15,12 +15,14 @@ import { CategoryDetail } from '@/config/types';
 interface CategoryListProps {
   categoryList: CategoryDetail[];
   allPostCount: number;
+  hotPostCount: number;
   currentCategory?: string;
 }
 
 const CategoryList = ({
   categoryList,
   allPostCount,
+  hotPostCount,
   currentCategory = 'all',
 }: CategoryListProps) => {
   const router = useRouter();
@@ -43,12 +45,18 @@ const CategoryList = ({
             displayName='All'
             count={allPostCount}
           />
+          <CategoryButton
+            href='/blog/hot'
+            isCurrent={currentCategory === 'hot'}
+            displayName='🔥 HOT'
+            count={hotPostCount}
+          />
           {categoryList.map((cg) => (
             <CategoryButton
               key={cg.dirName}
               href={`/blog/${cg.dirName}`}
               displayName={cg.publicName}
-              isCurrent={cg.dirName === currentCategory}
+              isCurrent={currentCategory === cg.dirName}
               count={cg.count}
             />
           ))}
