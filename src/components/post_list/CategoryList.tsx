@@ -48,7 +48,7 @@ const CategoryList = ({
           <CategoryButton
             href='/blog/hot'
             isCurrent={currentCategory === 'hot'}
-            displayName='🔥 HOT'
+            displayName='🔥추천'
             count={hotPostCount}
           />
           {categoryList.map((cg) => (
