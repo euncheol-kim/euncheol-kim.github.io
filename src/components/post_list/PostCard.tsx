@@ -11,10 +11,10 @@ interface Props {
 
 const PostCard = ({ post }: Props) => {
   return (
-    <Link href={post.url}>
+    <Link href={post.url} className='h-full'>
       <li
         className={cn(
-          'flex flex-row gap-0 sm:h-full sm:flex-col sm:gap-3 ',
+          'flex flex-row gap-0 sm:h-full sm:flex-col sm:gap-3 h-full ',
           'overflow-hidden rounded-md border shadow-md transition hover:shadow-lg dark:border-slate-700  sm:hover:shadow-xl',
           'hover:border-primary dark:hover:border-white'
         )}

@@ -11,15 +11,15 @@ interface Props {
 
 export const MiniPostCard = ({ post }: Props) => {
   return (
-    <Link href={post.url} className='flex-1'>
+    <Link href={post.url} className='flex-1 max-[980px]:last:hidden'>
       <li
         className={cn(
-          'flex flex-col justify-center gap-0 flex-1 px-3 h-full py-1',
+          'flex flex-col justify-center gap-0 flex-1 px-3 h-full py-1 max-[640px]:py-2',
           'overflow-hidden rounded-md border shadow-md transition hover:shadow-lg dark:border-slate-700',
           'hover:border-primary dark:hover:border-white'
         )}
       >
-        <div className='relative flex flex-1 flex-col justify-between'>
+        <div className='relative flex flex-1 flex-col min-[980px]:justify-between justify-center'>
           <div>
             <div className='text-xs font-medium text-pink-600 sm:text-sm lg:text-base'>
               {post.categoryPublicName}
