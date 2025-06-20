@@ -8,6 +8,9 @@ const Blog = async () => {
   return (
     <section>
       <Curation postList={postList}/>
+      <div className='mx-auto w-full max-w-[1200px] my-10 px-8' >
+      <hr />
+      </div>
       <PostListPage postList={postList.slice(1)} />
     </section>
   );
