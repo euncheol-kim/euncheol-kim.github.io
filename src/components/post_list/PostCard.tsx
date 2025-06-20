@@ -40,7 +40,7 @@ const PostCard = ({ post }: Props) => {
           <div>
             {post.isHot && (
               <div className='absolute right-1 top-1 z-20 rounded-sm bg-red-500 px-1.5 py-0.5 text-xs font-medium text-stone-50 sm:hidden'>
-                HOT
+                추천
               </div>
             )}
             <div className='text-xs font-medium text-pink-600 sm:text-sm lg:text-base'>

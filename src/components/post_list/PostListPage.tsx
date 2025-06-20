@@ -25,7 +25,7 @@ const PostListPage = async ({ category, postList }: PostListProps) => {
         />
       </div>
       <section>
-        <ul className='grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 sm:gap-8 md:grid-cols-3 lg:gap-6'>
+        <ul className='grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 md:grid-cols-3 lg:gap-6'>
           {postList.map((post) => (
             <PostCard key={post.url + post.date} post={post} />
           ))}
