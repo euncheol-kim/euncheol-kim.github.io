@@ -133,7 +133,7 @@ export default async function AboutPage({ params: { locale } }: Props) {
                       </a>
                     </h3>
                     <div className='text-sm tabular-nums text-gray-500'>
-                      {work.start} - {work.end ?? 'Present'}
+                      {work.start} - {work.end ?? ''}
                     </div>
                   </div>
                 </CardHeader>
@@ -144,44 +144,13 @@ export default async function AboutPage({ params: { locale } }: Props) {
                 <h4 className='mt-7 font-semibold  leading-none print:text-[12px]'>{work.title}</h4>
                 {work.points && (
                   <ul className='mt-4 list-disc space-y-2 text-sm'>
-                    {work.points.map((point, index) => {
-                      if (typeof point === 'string') {
-                        return (
-                          <li key={index} className='ml-5 text-muted-foreground'>
-                            {point}
-                          </li>
-                        );
-                      } else {
-                        const project = careerProjectList.find((p) => p.slug === point.slug);
-                        if (!project)
-                          return (
-                            <li key={index} className='ml-5 text-muted-foreground'>
-                              {point.title}
-                            </li>
-                          );
-                        return (
-                          <D.Dialog key={point.slug}>
-                            <li className='ml-5 text-muted-foreground'>
-                              <D.DialogTrigger className='underline underline-offset-4 hover:text-pink-600'>
-                                {point.title}
-                              </D.DialogTrigger>
-                            </li>
-                            <D.DialogContent className='gap-0 px-0 pb-3'>
-                              <D.DialogTitle className='text-center text-xl'>
-                                {point.title}
-                              </D.DialogTitle>
-                              <div className='mt-1 text-center text-sm text-gray-500'>
-                                {project.startMonthString} - {project.endMonthString}
-                              </div>
-                              <div className='mt-2 max-h-[60vh] overflow-y-scroll sm:max-h-[70vh]'>
-                                <ProjectBody project={project} />
-                              </div>
-                              <D.DialogDescription className='sr-only'></D.DialogDescription>
-                            </D.DialogContent>
-                          </D.Dialog>
-                        );
-                      }
-                    })}
+                    {work.points.map((point, index) => 
+                       (
+                        <li key={index} className='ml-5 text-muted-foreground'>
+                          {point}
+                        </li>
+                      )
+                    )}
                   </ul>
                 )}
               </Card>

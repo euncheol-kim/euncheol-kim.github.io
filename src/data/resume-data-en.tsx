@@ -35,20 +35,29 @@ export const RESUME_DATA_EN = {
   ],
   work: [
     {
+      company: 'Toss Bank',
+      link: 'https://www.tossbank.com/',
+      title: 'Front-end Desktop Developer',
+      start: '2025. 07.',
+      end: null,
+      description: 'The third internet-only bank in South Korea, established by Toss (Viva Republica)',
+      points: ['Expected to join in July 2025'],
+    },
+    {
       company: 'Adena Software',
       link: 'https://www.adenasoft.com/',
       title: 'Web Front-end Developer',
       start: '2023. 03.',
-      end: null,
+      end: '2025. 07.',
       description:
         'A B2B forex/payment fintech company operating a white-label cryptocurrency exchange',
       points: [
         'Development of cryptocurrency spot, futures exchanges, and admin pages.',
-        'Implementation of dark/light mode',
-        'Integration of third-party payment services using pop-ups.',
-        'Search Engine Optimization (SEO)',
+        'Implementation of dark/light mode and design system.',
         'Improvement of trading chart usability and code structure.',
-        'Visualization of statistical data using Chart.js.',
+        'Integration of third-party payment services and fee calculation logic.',
+        'Search Engine Optimization (SEO)',
+        'Visualization of trading and user statistics.',
       ],
     },
     {
@@ -61,14 +70,13 @@ export const RESUME_DATA_EN = {
         'A Fintech B2B/C BaaS specialized company providing core banking and robo-advisors',
       points: [
         'Frontend development of asset allocation and trading simulator.',
-        'Creation of a React-based Single Page Application (SPA) and state management using Redux.',
         'Code migration from Vue.js to React.js.',
         'Optimization of frontend rendering performance.',
-        'Organization of git commit and branch rules.',
+        'Organization of git commit and branch rules.', 
       ],
     },
   ],
-  skills: ['Javascript', 'Typescript', 'React.js', 'Vue.js', 'Next.js'],
+  skills: ['Javascript', 'Typescript', 'React.js', 'Next.js'],
 } as const;
 
 export type RESUME = typeof RESUME_DATA_EN;
