@@ -8,6 +8,7 @@ export interface PostMatter {
   thumbnail: string;
   desc: string;
   isHot?: boolean;
+  isVisible?: boolean;
 }
 
 export interface Post extends PostMatter {
@@ -39,6 +40,7 @@ export interface ProjectMatter {
   tags: string;
   gitRepoUrl?: string;
   link?: string;
+  isVisible?: boolean;
 }
 
 export interface Project extends ProjectMatter {

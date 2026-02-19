@@ -2,7 +2,9 @@
 title: Nginx에 POST 요청하기 (405 Not Allowed)
 date: 2023-10-22
 desc: Nginx에 정적 자산을 POST로 요청할 수가 없다?
-thumbnail: /posts/deep_dive/nginx405/thumbnail.jpg
+isHot: true
+thumbnail: ./thumbnail.jpg
+isVisible: false
 ---
 
 ## 문제 상황
@@ -13,16 +15,16 @@ thumbnail: /posts/deep_dive/nginx405/thumbnail.jpg
 성공/실패의 경우 정상적으로 redirect 되었으나
 취소의 경우 redirect된 url에서 아래와 같이 405 Not Allowed 응답을 받았다.
 
-![redirect된 페이지의 405 응답](/posts/deep_dive/nginx405/1.png)
+![redirect된 페이지의 405 응답](./1.png)
 
 
 성공, 취소의 <u>redirect url을 동일하게 설정해도 같은 현상이 반복</u>되었다.
 
 네트워크 탭에서 각 요청을 살펴보았는데, 아래와 같이 요청 Method가 달랐다!
 
-![성공 redirect 페이지의 네트워크 요청 (200 응답)](/posts/deep_dive/nginx405/2.png)
+![성공 redirect 페이지의 네트워크 요청 (200 응답)](./2.png)
 
-![취소 redirect 페이지의 네트워크 요청 (405 응답)](/posts/deep_dive/nginx405/3.png)
+![취소 redirect 페이지의 네트워크 요청 (405 응답)](./3.png)
 
 
 서드파티 앱 쪽에, 성공은 GET으로 / 취소는 POST 로 요청하도록 미리 설정된 모양이다.

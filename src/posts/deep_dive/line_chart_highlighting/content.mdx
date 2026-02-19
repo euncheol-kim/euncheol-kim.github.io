@@ -2,13 +2,15 @@
 title: Chart.js line chart - mouse hover로 강조하기
 desc: mouse가 위치한 line만 강조하여 가독성 높이기
 date: 2023-11-22
-thumbnail: /posts/deep_dive/line_chart_highlighting/thumbnail.jpg
+thumbnail: ./thumbnail.jpg
+isHot: true
+isVisible: false
 ---
 
 ## 목표
-![before mouse hover](/posts/deep_dive/line_chart_highlighting/1.png)
+![before mouse hover](./1.png)
 
-![when hovering mouse](/posts/deep_dive/line_chart_highlighting/2.png)
+![when hovering mouse](./2.png)
  
 위 이미지([출처](https://www.amcharts.com/demos/highlighting-line-chart-series-on-legend-hover/))와 같이,
 여러 dataset을 하나의 line chart에서 보여주고,
@@ -48,7 +50,7 @@ const chartOption = {
 아래 이미지와 같이 매우 잘 동작하는 것을 확인할 수 있다. 깔끔!
 
 
-![before mouse hover](/posts/deep_dive/line_chart_highlighting/3.jpeg)![when hovering mouse3](/posts/deep_dive/line_chart_highlighting/4.jpeg)
+![before mouse hover](./3.jpeg)![when hovering mouse3](./4.jpeg)
 
 
 ---
@@ -63,13 +65,13 @@ legend item 기준 상하좌우 모두로 padding이 먹어버려
 legend item간 간격도 벌어지고 legend 위로도 여백이 생겨 보기 좋지 않다.
 (paddingLeft 등으로 상하좌우 구분하여 먹일 수 없다 ㅜ)
 
-![출처 : https://stackoverflow.com/questions/42585861/chart-js-increase-spacing-between-legend-and-chart](/posts/deep_dive/line_chart_highlighting/5.png)
+![출처 : https://stackoverflow.com/questions/42585861/chart-js-increase-spacing-between-legend-and-chart](./5.png)
 
 나만 이런 생각을 한 것은 당연히 아닐테니,, reference를 찾아보았다. 
 
 Chart.js 공식 github에 다음과 같은 [issue](https://github.com/chartjs/Chart.js/issues/6544)가 있었다.
 
-![내 생각과 연관된 chart.js github issue](/posts/deep_dive/line_chart_highlighting/9.jpg)
+![내 생각과 연관된 chart.js github issue](./9.jpg)
  
 <Callout>
 아쉽지만 결론은, chart.js의 내장 legend 말고 [HTML Legend](https://www.chartjs.org/docs/latest/samples/legend/html.html)를 사용하라! 였다.
@@ -143,7 +145,7 @@ hover는 catch하고 leave는 catch하지 못하여
 
 마우스가 chart 바깥에 있음에도 dataset 하나를 계속 강조하고 있게 되는 현상이 발생했다.
 
-![hover 후 빠르게 chart에서 마우스 leave 했을 때 강조가 남아있는 현상](/posts/deep_dive/line_chart_highlighting/8.jpeg)
+![hover 후 빠르게 chart에서 마우스 leave 했을 때 강조가 남아있는 현상](./8.jpeg)
 
 ### 원인
 정상적인 이벤트 발생 순서는 아래와 같다.

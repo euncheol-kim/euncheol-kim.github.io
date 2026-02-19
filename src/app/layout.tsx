@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 
-import { PostHogProvider } from '@/components/PostHogProvider';
 import { Toaster } from '@/components/ui/toaster';
 import { baseDomain, blogDesc, blogName, blogThumbnailURL } from '@/config/const';
 import '@/config/globals.css';
@@ -38,18 +37,16 @@ export default function RootLayout({
   return (
     <html lang='en' className='h-full scroll-my-20 scroll-smooth' suppressHydrationWarning>
       <body className='flex min-h-screen flex-col font-pretendard'>
-        <PostHogProvider>
-          <ThemeProvider>
-            <Header />
-            <main className='mt-[40px] flex flex-1 flex-col sm:mt-[64px]'>{children}</main>
-            <Footer />
-          </ThemeProvider>
-          <Toaster />
-          <Analytics />
-          <SpeedInsights />
-          <GoogleAnalytics gaId='G-TRBVGE9TYP' />
-          <GoogleTagManager gtmId='G-TRBVGE9TYP' />
-        </PostHogProvider>
+        <ThemeProvider>
+          <Header />
+          <main className='mt-[40px] flex flex-1 flex-col sm:mt-[64px]'>{children}</main>
+          <Footer />
+        </ThemeProvider>
+        <Toaster />
+        <Analytics />
+        <SpeedInsights />
+        <GoogleAnalytics gaId='G-TRBVGE9TYP' />
+        <GoogleTagManager gtmId='G-TRBVGE9TYP' />
       </body>
     </html>
   );

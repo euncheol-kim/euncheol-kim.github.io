@@ -46,9 +46,14 @@ const PostCard = ({ post }: Props) => {
             <div className='text-xs font-medium text-pink-600 sm:text-sm lg:text-base'>
               {post.categoryPublicName}
             </div>
-            <h2 className='my-1 text-sm font-semibold sm:mb-3 sm:text-base sm:font-bold lg:text-lg'>
+            <h2 className='my-1 text-sm font-semibold sm:mb-1 sm:text-base sm:font-bold lg:text-lg'>
               {post.title}
             </h2>
+            {post.desc && (
+              <p className='mb-2 line-clamp-2 hidden text-xs text-gray-500 dark:text-gray-400 sm:block'>
+                {post.desc}
+              </p>
+            )}
           </div>
           <div className='flex justify-between gap-3 text-xs text-gray-500 dark:text-gray-400 sm:text-sm'>
             <div className='flex items-center gap-1'>

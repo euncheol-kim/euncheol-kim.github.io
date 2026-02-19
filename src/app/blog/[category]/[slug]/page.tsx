@@ -7,7 +7,7 @@ import { PostHeader } from '@/components/post_detail/PostHeader';
 import TocSidebar from '@/components/post_detail/TableOfContentSidebar';
 import TocTop from '@/components/post_detail/TableOfContentTop';
 import { baseDomain } from '@/config/const';
-import { getPostDetail, getPostPaths, parsePostAbstract, parseToc } from '@/lib/post';
+import { getPostDetail, getPostList, parseToc } from '@/lib/post';
 
 type Props = {
   params: { category: string; slug: string };
@@ -42,12 +42,9 @@ export async function generateMetadata({ params: { category, slug } }: Props): P
   };
 }
 
-export function generateStaticParams() {
-  const postPaths: string[] = getPostPaths();
-  const paramList = postPaths
-    .map((path) => parsePostAbstract(path))
-    .map((item) => ({ category: item.categoryPath, slug: item.slug }));
-  return paramList;
+export async function generateStaticParams() {
+  const postList = await getPostList();
+  return postList.map((post) => ({ category: post.categoryPath, slug: post.slug }));
 }
 
 const PostDetail = async ({ params: { category, slug } }: Props) => {

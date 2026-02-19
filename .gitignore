@@ -13,6 +13,10 @@
 /.next/
 /out/
 
+# auto-generated post/project images
+/public/posts/
+/public/projects/
+
 # production
 /build
 

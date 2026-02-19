@@ -39,7 +39,11 @@ const parseProject = async (postPath: string, locale: Locale) => {
     ? format(grayMatter.endMonth, monthFormat[locale])
     : presentLang[locale];
 
-  return { ...grayMatter, content, startMonthString, endMonthString, slug };
+  const isVisible = grayMatter.isVisible !== false;
+  const { category } = getProjectInfoFromPath(postPath);
+  const imageBase = `/projects/${category}/${slug}/`;
+  const resolvedContent = content.replaceAll('](./',']('+imageBase);
+  return { ...grayMatter, content: resolvedContent, startMonthString, endMonthString, slug, isVisible };
 };
 
 // project를 날짜 최신순으로 정렬
@@ -66,7 +70,7 @@ const getProjectList = async (locale: Locale): Promise<Project[]> => {
   const projectList = await Promise.all(
     projectPaths.map((postPath) => parseProject(postPath, locale))
   );
-  return projectList;
+  return projectList.filter((project) => project.isVisible !== false);
 };
 
 export const getSortedProjectList = async (locale: Locale) => {
@@ -85,5 +89,5 @@ export const getCareerProjectList = async (locale: Locale) => {
   const projectList = await Promise.all(
     projectPaths.map((postPath) => parseProject(postPath, locale))
   );
-  return projectList;
+  return projectList.filter((project) => project.isVisible !== false);
 };

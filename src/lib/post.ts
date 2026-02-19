@@ -20,9 +20,16 @@ export const getPostPaths = (category?: string) => {
 const parsePost = async (postPath: string): Promise<Post> => {
   const postAbstract = parsePostAbstract(postPath);
   const postDetail = await parsePostDetail(postPath);
+  const imageBase = `/posts/${postAbstract.categoryPath}/${postAbstract.slug}/`;
+  const thumbnail = postDetail.thumbnail.startsWith('./')
+    ? postDetail.thumbnail.replace('./', imageBase)
+    : postDetail.thumbnail;
+  const content = postDetail.content.replaceAll('](./','](/posts/' + postAbstract.categoryPath + '/' + postAbstract.slug + '/');
   return {
     ...postAbstract,
     ...postDetail,
+    thumbnail,
+    content,
   };
 };
 
@@ -48,7 +55,8 @@ const parsePostDetail = async (postPath: string) => {
   const grayMatter = data as PostMatter;
   const readingMinutes = Math.ceil(readingTime(content).minutes);
   const dateString = dayjs(grayMatter.date).locale('ko').format('YYYY년 MM월 DD일');
-  return { ...grayMatter, dateString, content, readingMinutes };
+  const isVisible = grayMatter.isVisible !== false;
+  return { ...grayMatter, dateString, content, readingMinutes, isVisible };
 };
 
 // category folder name을 public name으로 변경 : dir_name -> Dir Name
@@ -67,7 +75,7 @@ const sortPostList = (PostList: Post[]) => {
 export const getPostList = async (category?: string): Promise<Post[]> => {
   const postPaths = getPostPaths(category);
   const postList = await Promise.all(postPaths.map((postPath) => parsePost(postPath)));
-  return postList;
+  return postList.filter((post) => post.isVisible !== false);
 };
 
 export const getHotPostList = async () => {

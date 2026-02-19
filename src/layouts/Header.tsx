@@ -47,7 +47,8 @@ export const Header = () => {
           ))}
         </div>
 
-        {isLocalePath && <LanguageSelector className='hidden sm:flex' />}
+        {/*About Page의 언어 선택기 숨김*/}
+        {/* {isLocalePath && <LanguageSelector className='hidden sm:flex' />} */}
 
         <div className='flex gap-3'>
           <ThemeSwitch />

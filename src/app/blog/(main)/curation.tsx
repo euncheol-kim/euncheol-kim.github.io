@@ -3,6 +3,8 @@ import PostCard from "@/components/post_list/PostCard";
 import { Post } from "@/config/types";
 
 export const Curation = ({postList}: {postList: Post[]}) => {
+  if (postList.length === 0) return null;
+
   const firstPost = postList[0];
   const hotPostAllList = postList.filter((post) => post.isHot);
   const hotPostShowList = firstPost.isHot? hotPostAllList.slice(1,  5) : hotPostAllList.slice(0,  4);

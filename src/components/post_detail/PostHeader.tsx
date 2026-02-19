@@ -10,7 +10,12 @@ interface Props {
 export const PostHeader = ({ post }: Props) => {
   return (
     <header className='mt-14 text-center'>
-      <h1 className='mb-5 text-lg sm:text-xl md:text-2xl lg:text-3xl'>{post.title}</h1>
+      <h1 className='mb-2 text-lg sm:text-xl md:text-2xl lg:text-3xl'>{post.title}</h1>
+      {post.desc && (
+        <p className='mb-5 text-sm text-gray-500 dark:text-gray-400 sm:text-base'>
+          {post.desc}
+        </p>
+      )}
       <div className='mb-3 text-base'>
         <Link
           href={`/blog/${post.categoryPath}`}
