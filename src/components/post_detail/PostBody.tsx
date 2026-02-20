@@ -7,6 +7,7 @@ import rehypePrettyCode from 'rehype-pretty-code';
 import rehypeSlug from 'rehype-slug';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
+import { getHighlighter } from 'shikiji/bundle/full';
 
 interface Props {
   post: Post;
@@ -32,7 +33,8 @@ export const PostBody = ({ post }: Props) => {
               // @ts-ignore
               rehypePrettyCode,
               {
-                theme: { dark: 'github-dark-dimmed', light: 'github-light' },
+                theme: { dark: 'material-theme-palenight', light: 'material-theme-lighter' },
+                getHighlighter,
               },
             ],
             // toc id를 추가하고 제목을 연결

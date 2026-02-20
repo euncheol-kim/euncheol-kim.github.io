@@ -1,0 +1,465 @@
+---
+title:  "[Spring Boot] DDD 아키텍처에 Event Driven Architecture 도입하기"
+desc: 이벤트 기반 처리 방식을 Spring Boot에서 도입하는 방법을 알아봅니다.
+date: 2023-03-05
+thumbnail: ./thumbnail.png
+isHot: true
+isVisible: true
+tags: Spring Boot, Event Driven Architecture
+---
+
+> <span id="functional-requirement">[기능 요구 사항](#functional-requirement)</span>
+> : 서비스에서는 카카오 소셜 로그인을 제공합니다.
+> <br />
+> 비기능 요구 사항
+>  1. DDD 아키텍처를 적용합니다.
+>  2. 도메인 모델(POJO Domain)과 데이터 모델(JPA Entity)로 분리합니다.
+>  3. 인증 데이터는 MemberAccount 도메인으로 관리합니다. => Aggregate Root
+>  4. 소셜 로그인과 관련된 데이터는 SocialAccount 도메인으로 통합 관리합니다. => Aggregate Root
+>  5. 일반 사용자 데이터는 UserProfile 도메인으로 관리합니다. => Aggregate Root
+>  6. MemberAccount와 SocialAccount는 1:N 관계를 가집니다.
+>  7. UserProfile와 MemberAccount는 1:1 관계를 가집니다.
+>  8. MemberAccount 도메인과 SocialAccount 도메인은 객체 참조 대신 ID 참조 방식을 사용합니다.
+>  9. UserProfile 도메인과 MemberAccount 도메인은 객체 참조 대신 ID 참조 방식을 사용합니다.
+>  10. 정상적으로 로그인 되어진 사용자는 access token과 refresh token을 발급합니다.
+
+개발을 하다보면 도메인별로 데이터를 관리하고 저장하는 요구사항이 생길 수 있습니다.
+이 문제를 해결하기 위한 첫 번째 방법으로는 절차적 기반 처리 방식을 도입하는 것입니다.
+
+**[Create]: 절차적 처리 방식의 로직 플로우**
+ - 사용자가 소셜 로그인을 시도하면, 소셜 로그인 서비스에 요청을 보냅니다.
+ - 소셜 로그인 서비스는 사용자 정보를 반환하고 필요한 데이터를 VO 형태로 변환합니다.
+ - VO 형태로 변환된 내부의 고유한 값을 통해 SocialAccount 연결된 DB를 조회합니다.
+ - 조회된 데이터가 있다면 해당 데이터를 사용하고, 없다면 새로운 데이터를 생성하여 토큰을 발급합니다.
+
+**[Package]: 절차적 처리 방식의 패키지 구조 예시**
+- ```text
+    src/
+    └── modules/
+        ├── account
+        └── profile
+    ```
+
+
+**[Create]: 절차적 처리 방식의 로직 예시 코드**
+  - ```java {3, 4, 9, 12, 13, 17, 29}
+    @Transactional
+    public PairTokenResponse login(KakaoSocialLoginCommand command) {
+        SocialUserProfileResult profile = loadKakaoUserProfilePort.load(command.authorizationCode());
+        SocialAccount socialAccount = querySocialAccountService.findExistingSocialAccount(command.provider(), Long.valueOf(profile.providerId()))
+                        .orElse(null);
+
+        MemberAccount memberAccount;
+        if (socialAccount != null) {
+            // [Case A] 기존 가입자: 안전하게 기존 객체의 필드 접근
+            memberAccount = queryMemberAccountService.findById(socialAccount.getMemberAccountId());
+        } else {
+            // [Case B] 신규 가입자: 새로운 객체 생성
+            // B-1. 인증 객체 생성
+            memberAccount = MemberAccount.create(profile.email(), MemberRole.USER);
+            commandMemberAccountService.save(memberAccount);
+
+            // B-2. 소셜 계정 객체 생성
+            SocialUserProfileInfo socialUserProfileInfo = SocialUserProfileInfo.create(
+                profile.providerId(), 
+                profile.connectedAt(), 
+                profile.emailAgreed(), 
+                profile.profileNicknameAgreed(),
+                profile.profileImageUrl(),
+                profile.profileThumbnailImageUrl()
+            );
+            SocialAccount createSocialAccount = SocialAccount.create(memberAccount.getId(), socialUserProfileInfo);
+            commandSocialAccountService.save(createSocialAccount);
+            
+            // B-3. 사용자 프로필 객체 생성
+            UserProfileInfo userProfileInfo = UserProfileInfo.create(profile.nickname());
+            UserProfile userProfile = UserProfile.create(memberAccount.getId(), userProfileInfo);
+            commandUserProfileService.save(userProfile);
+        }
+
+        TokenClaimsRequest claimsRequest = commandTokenService.createTokenClaimsRequest(memberAccount.getId(), memberAccount.getEmail(), memberAccount.getRole());
+        return commandTokenService.issueTokenPair(claimsRequest);
+    }
+    ```
+
+작은 프로젝트 규모이거나 MVP를 개발하는 경우에는 절차적 처리 방식이 효과적일 수 있습니다.
+하지만, <u>규모가 커지고 복잡해지면 절차적 처리 방식은 유지보수가 어려워질 수 있으며 도메인 모듈 간의 물리적/논리적 결합(Coupling)이 높아질 수 있습니다.</u> 이 문제를 해결하기 위한 두 번째 방법으로는 이벤트 기반 처리 방식을 도입하는 것이 있습니다.
+
+
+<Callout type="info"> <b> 도메인 모듈간의 물리적/논리적 결합이 높아진다는 의의</b>
+: login()로직은 account모듈에 속합니다. 이때, profile모듈에 속하는 loadUserProfilePort를 호출하는 것은 모듈간 논리적 결합이 높아지게 됩니다. <br/> -------------------------------------------------------------------------
+<b>논리적 결합도:</b> A 모듈이 B 모듈의 '행위(Service, Repository)'를 직접 호출하는 것.
+<b>물리적 결합도:</b> A 모듈이 B 모듈의 '클래스(Class, Record)'를 import 문으로 가져다 쓰는 것.</Callout>
+
+
+---
+
+## STEP 1. 이벤트 기반 아키텍처(EDA)란 무엇인가?
+EDA는 이벤트를 중심으로 동작하는 아키텍처입니다. 핵심 개념은 아래와 같습니다.
+| 개념 | 설명 |
+|---|---|
+| <span id="event">이벤트(Event)</span> | 시스템 내에서 발생하는 사건 |
+| <span id="event-publisher">이벤트 발행자(Publisher)</span> | 이벤트를 생성하는 주체 |
+| <span id="event-consumer">이벤트 구독자(Consumer)</span> | 이벤트를 소비하는 주체, 이벤트가 발생하면 이를 처리하는 주체 |
+
+하나의 기능을 만드는 목표는 절차적 처리 방식과 EDA 모두 동일하지만, EDA는 이벤트를 발행하고 구독하여 핵심 비즈니스 로직 내부의 모듈간 강결합(Coupling)을 낮추는 것이 큰 차이점입니다.
+
+
+### STEP 1-1. 절차적 처리 방식의 한계
+
+절차적 처리 방식으로 개발을 하면 SOLID 원칙의 OCP 위배 및 모듈간 논리적 결합이 높아질 확률이 있습니다.
+
+
+<Callout type="info"> <span id="ocp-principle">[OCP의 핵심](#ocp-principle)</span>
+: 새로운 기능을 추가 할 때, 기존의 핵심 비즈니스의 코드(UseCase 또는 Service) 수정은 최소화하고 확장(Extension)을 통해 해결 할 수 있는가?에 있으며 변경의 파급 효과를 격리하는 것이 주된 목적입니다.</Callout>
+
+<br/>
+
+#### [OCP 위배 및 논리적 강결함 증가 시나리오]: 회원가입 된 일반 사용자는 "이메일로 회원가입 축하 메시지"를 받습니다.
+> - [기능 요구사항](#functional-requirement) 개발 된 이후에 요구사항이 추가되었다고 가정합니다.
+> - notification 모듈 내부에 MessageService.sendWelcomeEmail() 함수를 구현했다고 가정합니다.
+
+#### <span id="sequential-processing-code-example">[절차적 처리 방식 구현 코드 예시](#sequential-processing-code-example)</span>
+```java {34}
+@Transactional
+public PairTokenResponse login(KakaoSocialLoginCommand command) {
+    SocialUserProfileResult profile = loadKakaoUserProfilePort.load(command.authorizationCode());
+    SocialAccount socialAccount = querySocialAccountService.findExistingSocialAccount(command.provider(), Long.valueOf(profile.providerId()))
+                    .orElse(null);
+
+    MemberAccount memberAccount;
+    if (socialAccount != null) {
+        // [Case A] 기존 가입자: 안전하게 기존 객체의 필드 접근
+        memberAccount = queryMemberAccountService.findById(socialAccount.getMemberAccountId());
+    } else {
+        // [Case B] 신규 가입자: 새로운 객체 생성
+        // B-1. 인증 객체 생성
+        memberAccount = MemberAccount.create(profile.email(), MemberRole.USER);
+        commandMemberAccountService.save(memberAccount);
+
+        // B-2. 소셜 계정 객체 생성
+        SocialUserProfileInfo socialUserProfileInfo = SocialUserProfileInfo.create(
+            profile.providerId(), 
+            profile.connectedAt(), 
+            profile.emailAgreed(), 
+            profile.profileNicknameAgreed(),
+            profile.profileImageUrl(),
+            profile.profileThumbnailImageUrl()
+        );
+        SocialAccount createSocialAccount = SocialAccount.create(memberAccount.getId(), socialUserProfileInfo);
+        commandSocialAccountService.save(createSocialAccount);
+        
+        // B-3. 사용자 프로필 객체 생성
+        UserProfileInfo userProfileInfo = UserProfileInfo.create(profile.nickname());
+        UserProfile userProfile = UserProfile.create(memberAccount.getId(), userProfileInfo);
+        commandUserProfileService.save(userProfile);
+
+        // B-4. 이메일로 회원가입 축하 메시지 발송
+        messageService.sendWelcomeEmail(memberAccount.getEmail());
+    }
+
+    TokenClaimsRequest claimsRequest = commandTokenService.createTokenClaimsRequest(memberAccount.getId(), memberAccount.getEmail(), memberAccount.getRole());
+    return commandTokenService.issueTokenPair(claimsRequest);
+}
+```
+
+
+#### <span id="ocp-violation">(1) OCP 위배 이유](#ocp-violation)</span>
+: 메시지를 보내야하는 기능을 추가하고자 하면, <u>기존에 작성된 핵심 비즈니스 로직인 login() 함수를 수정</u>해야 합니다. 이는 OCP를 위배합니다.
+
+#### <span id="logical-coupling-violation">[(2) 논리적 강결함 증가 이유](#logical-coupling-violation)</span>
+: 메시지를 보내야하는 기능이 추가되면, <u>account 모듈에서 notification 모듈에 존재하는 MessageService를 의존하여 호출</u>해야 합니다. 이는 account가 notification에 대한 의존성을 가지게 되어 논리적으로 강결합이 발생하게 됩니다.
+
+EDA를 도입하면 [OCP 위배](#ocp-violation) 및 [논리적 강결함 증가](#logical-coupling-violation) 문제를 해결할 수 있습니다.
+
+## STEP 2. 이벤트 기반 아키텍처(EDA) 도입하기
+### STEP 2-1. ApplicationEventPublisher, @EventListener를 사용한 이벤트 처리 방식
+| 개념 | 설명 |
+|---|---|
+| ApplicationEventPublisher | 이벤트를 발생(Publish)하는 주체 |
+| @EventListener | 발생한 이벤트를 구독(Subscribe)하여 소비(Consume)하는 수신처 |
+
+Spring Boot에서는 ApplicationEventPublisher @EventListener를 이용해 EDA를 구현할 수 있습니다.
+저희의 목표는 [절차적 처리 방식 코드](#sequential-processing-code-example)를 이벤트 기반 처리 방식으로 변경하는 것입니다.
+
+비기능 요구사항 관점으로 접근하고 분석해보겠습니다.
+
+> [신규 가입자]: 기존에 가입한 이력이 없는 사용자를 의미합니다.
+>  - MemberAccount 도메인 규칙을 적용해 데이터를 생성합니다.
+>  - SocialAccount 도메인 규칙을 적용해 데이터를 생성합니다.
+>  - UserProfile 도메인 규칙을 적용해 데이터를 생성합니다.
+>  - MessageService를 통해 이메일로 회원가입 축하 메시지를 발송합니다.
+>
+> [분석]
+>  - SocialAccount는 MemberAccount의 id를 참조하고 있습니다.
+>  - UserProfile는 MemberAccount의 id를 참조하고 있습니다.
+>  - MessageService는 MemberAccount의 email을 요청으로 받아 이메일로 회원가입 축하 메시지를 발송합니다.
+>
+> [결론]    
+>  - MemberAccount의 데이터가 적재될 때 SocialAccount, UserProfile 데이터가 적재되어야 하며, sendWelcomeEmail() 함수를 통해 이메일로 회원가입 축하 메시지를 발송해야 합니다.
+>  - SocialAccount, UserProfile의 데이터 적재와 sendWelcomeEmail() 함수 호출은 이벤트로 간주되어야 합니다.
+
+<br/>
+
+#### 구현 방향성
+#### 1. 이벤트 발생 트리거 VO 객체 생성 => "[이벤트(Event)](#event)"
+: 이벤트 발생 트리거 VO 객체는 이벤트 발생 시 전달되는 데이터를 담고 있는 객체입니다.
+
+```java {1, 2, 12, 13, 19, 20}
+// account.domain.event.SocialAccountLinkRequestedEvent.java
+public record SocialAccountLinkRequestedEvent(
+        Long memberId,
+        OAuth2Provider provider,
+        String providerId,
+        Instant socialConnectedAt,
+        boolean socialEmailAgreed,
+        boolean socialNicknameAgreed
+) {
+}
+
+// profile.domain.event.UserProfileCreatedEvent.java
+public record UserProfileCreatedEvent(
+        Long memberId,
+        String nickname
+) {
+}
+
+// notification.domain.event.WelcomeEmailSentEvent.java
+public record WelcomeEmailSentEvent(
+        Long memberId,
+        String email
+) {
+}
+```
+
+#### 2. 이벤트 핸들러 구현 => "[이벤트 구독자(Consumer)](#event-consumer)"
+: 이벤트 핸들러는 이벤트를 구독(Subscribe)하여 소비(Consume)하는 수신처입니다.
+```java {1, 2, 3, 14, 15, 16, 23, 24, 25}
+// account.application.event.SocialAccountEventHandler.java
+@EventListener
+public void handleSocialAccountCreation(SocialAccountLinkRequestedEvent event) {
+    SocialAccount socialAccount = commandSocialAccountService.saveSocialAccount(
+            event.provider(),
+            event.memberId(),
+            event.providerId(),
+            event.socialConnectedAt(),
+            event.socialEmailAgreed(),
+            event.socialNicknameAgreed()
+    );
+}
+
+// profile.application.event.UserProfileEventHandler.java
+@EventListener
+public void handleUserProfileCreation(UserProfileCreatedEvent event) {
+    UserProfile userProfile = commandUserProfileService.saveUserProfile(
+            event.memberId(),
+            event.nickname()
+    );
+}
+
+// notification.application.event.WelcomeEmailEventHandler.java
+@EventListener
+public void handleWelcomeEmailSending(WelcomeEmailSentEvent event) {
+    messageService.sendWelcomeEmail(event.email());
+}
+```
+
+#### 3. 이벤트 발행 트리거 함수 구현 => "[이벤트 발행자(Publisher)](#event-publisher)"
+: 이벤트 발행 트리거 함수는 이벤트를 발생(Publish)하는 함수입니다.
+```java {18, 19, 28, 29, 34, 35}
+...
+private final ApplicationEventPublisher eventPublisher;
+
+@Transactional
+public PairTokenResponse login(KakaoSocialLoginCommand command) {
+    SocialUserProfileResult profile = loadKakaoUserProfilePort.load(command.authorizationCode());
+    SocialAccount socialAccount = querySocialAccountService.findExistingSocialAccount(command.provider(), Long.valueOf(profile.providerId()))
+                    .orElse(null);
+
+    MemberAccount memberAccount;
+    if (socialAccount != null) {
+        // [Case A] 기존 가입자: 안전하게 기존 객체의 필드 접근
+        memberAccount = queryMemberAccountService.findById(socialAccount.getMemberAccountId());
+    } else {
+        // [Case B] 신규 가입자: 새로운 객체 생성
+        memberAccount = MemberAccount.create(profile.email(), MemberRole.USER);
+        commandMemberAccountService.save(memberAccount);
+
+        // B-1. 이벤트 발생 트리거 함수 호출
+        eventPublisher.publishEvent(new SocialAccountLinkRequestedEvent(
+            memberAccount.getId(),
+            command.provider(),
+            profile.providerId(),
+            profile.connectedAt(),
+            profile.emailAgreed(),
+            profile.profileNicknameAgreed()
+        ));
+
+        // B-2. 이벤트 발생 트리거 함수 호출
+        eventPublisher.publishEvent(new UserProfileCreatedEvent(
+            memberAccount.getId(),
+            profile.nickname()
+        ));
+
+        // B-3. 이벤트 발생 트리거 함수 호출
+        eventPublisher.publishEvent(new WelcomeEmailSentEvent(
+            memberAccount.getId(),
+            memberAccount.getEmail()
+        ));
+    }
+
+    TokenClaimsRequest claimsRequest = commandTokenService.createTokenClaimsRequest(memberAccount.getId(), memberAccount.getEmail(), memberAccount.getRole());
+    return commandTokenService.issueTokenPair(claimsRequest);
+}
+```
+EDA 방식으로 리팩토링하여 account 모듈이 다른 모듈에 대한 의존성(commandUserProfileService, commandSocialAccountService, messageService)을 낮추어 논리적 결합을 낮추게 됩니다.
+
+<Callout type="danger">
+<u>그러면 OCP를 위배하는 것은 해결되었다고 볼 수 있을까요?</u> <font color="red"> <b>아닙니다.</b></font> <br/>
+<u>또 다른 문제는 발생하지 않을까요?</u>  <font color="red"> <b>발생할 확률이 있습니다.</b></font>
+</Callout>
+
+#### 🔥 <font color="steelblue"><b>OCP 위배는 여전히 남아있다.</b></font>
+> 만약, 기능이 추가되어 카카오톡 회원가입 축하메시지를 보내야한다면 login() 함수를 수정해야 합니다. 이는 여전히 핵심 비즈니스 로직을 수정해야하기 때문에 [OCP를 위배](#ocp-principle)하게 됩니다.
+
+#### 🔥<font color="steelblue"><b>모듈을 MSA로 분리하게 될 때 문제가 발생합니다.</b></font>
+> 이뿐만 아니라, 모듈을 MSA로 분리하게 되면 문제가 발생합니다.
+> 예를 들어, notification 모듈을 다른 프로젝트로 이관하여 MSA 방식으로 구축한다고 가정해보겠습니다. 
+> MSA방식으로 구축한다는 것은 다른 프로젝트로 notification 모듈이 이관된다는 것을 의미하는데요.
+> 이는 기존의 프로젝트에서 notification 모듈이 사라진다는 것을 의미합니다.
+>
+>이렇게 된다면 notification 모듈의 WelcomeEmailSentEvent가 없어지게 되어 기존의 프로젝트에서 사용할 수 없게 됩니다.
+
+#### 🔥 <font color="steelblue"><b>Transactional 어노테이션 문제</b></font>
+> 위에서 언급하지는 않았지만 loadKakaoUserProfilePort.load()는 "외부 API"를 호출하는 함수입니다.
+> 여기서의 외부 API는 "소셜 프로바이더(카카오, 네이버, 구글 등)에서 사용자 정보를 제공하는 주체"를 의미합니다.
+>
+> login()함수는 외부 API를 호출하는 함수를 포함하는데, 이 함수에 @Transactional 어노테이션이 붙어있습니다.
+> 트랜잭션이 시작되면 스레드는 DB 커넥션 풀에서 커넥션 하나를 점유합니다. 이 커넥션은 트랜잭션이 Commit 또는 Rollback될 때까지 반환되지 않습니다.
+>
+>만약 외부 서비스의 응답 시간이 길어지게 된다면 DB 커넥션은 아무 일도 하지 않고 트랜잭션을 유지하며 대기합니다. 동시 사용자가 많아진다면 DB 커넥션 풀이 고갈되고, 서비스는 응답 없음(Timeout) 상태가 됩니다.
+
+
+### STEP 2-1. shared-kernel Pattern을 사용한 이벤트 처리 방식: 공개 API 방식
+shared-kernel은 각 모듈이 서로의 내부 도메인을 직접 참조하지 못하게 막고, 시스템 전체에서 공통으로 사용하는 이벤트 객체와 DTO, 인터페이스만을 모아둔 별도의 공유 모듈(Shared Kernel)을 만드는 방식입니다.
+
+shared-kernel은 단순히 여러 곳에서 같이 쓰이는 객체를 모아두는 곳이 아닙니다. 
+<u>shared-kernel == 공유 도메인 모듈</u>이라고 이해하면 좋습니다. 
+즉, 시스템의 핵심 비즈니스 규칙과 관련된 도메인 객체(vo, dto, interface)를 공유하는 것을 말합니다.
+
+shared-kernel의 엄격한 규칙은 아래와 같습니다.
+> - shared-kernel 모듈을 도입하면 모듈(account, profile 등)간의 직접 의존은 절대 금지됩니다.
+> - shared-kernel은 절대! 어떤 모듈도 의존하면 안됩니다.
+> - 1無_No Business Logic(비즈니스 로직 제로): 
+>   - shared-kernel 모듈에는 상태를 변경하거나 복잡한 계산을 수행하는 Service/UseCase 클래스가 들어가면 안 됩니다. 오직 데이터를 담고 전달하는 역할(Event, DTO, VO, Interface)만 수행해야 합니다.
+> - 2無_Low Volatility(낮은 변동성): 
+>   - 모든 비즈니스 모듈이 이 Shared Kernel을 의존하기 때문에, 이곳의 클래스가 변경되면 전체 시스템에 파급 효과(Ripple Effect)가 발생합니다. 따라서 시스템 전반에서 합의된, 변경될 확률이 극히 적은 견고한 핵심 도메인 개념만 두어야 합니다.
+> - 3無_Zero Framework Dependency(프레임워크 의존성 제로): 
+>   - Shared Kernel 내부의 클래스들은 가급적 순수 자바 객체(POJO)여야 합니다. Spring Web(HttpServletRequest), Spring Data JPA(@Entity, @Table), Spring Security 등의 어노테이션이나 클래스가 import 되어서는 안 됩니다. (이벤트 발행을 위한 규격 정도만 예외적으로 허용합니다.)
+
+<Callout type="info"> **common 모듈과 shared-kernel 모듈**
+만약 한 프로젝트에 common 모듈과 shared-kernel 모듈이 모두 존재한다면, 
+common 모듈은 shared-kernel 모듈을 의존할 수 있습니다.</Callout>
+
+<br/>
+
+#### shared-kernel 적용하기
+#### (1) shared-kernel 패키지 구조 예시
+```text
+src/
+└── shared-kernel/
+    ├── event
+    |   └── MemberRegisteredEvent.java
+    ├── dto/
+    ├── vo/
+    └── interface/
+```
+
+#### (2) shared-kernel 이벤트 객체 코드 예시
+```java
+public record MemberAccountRegisteredEvent(
+    Long memberId,
+    String email,          
+    String nickname,
+    String provider,
+    String providerId,
+    Instant socialConnectedAt,
+    boolean socialEmailAgreed,
+    boolean socialNicknameAgreed
+) {
+}
+```
+
+#### (3) 기존의 이벤트 핸들러 수정 코드 예시
+```java
+// account.application.event.SocialAccountEventHandler.java
+@EventListener
+public void handleSocialAccountCreation(MemberAccountRegisteredEvent event) {
+    SocialAccount socialAccount = commandSocialAccountService.saveSocialAccount(
+            event.provider(),
+            event.memberId(),
+            event.providerId(),
+            event.socialConnectedAt(),
+            event.socialEmailAgreed(),
+            event.socialNicknameAgreed()
+    );
+}
+
+// profile.application.event.UserProfileEventHandler.java
+@EventListener
+public void handleUserProfileCreation(MemberAccountRegisteredEvent event) {
+    UserProfile userProfile = commandUserProfileService.saveUserProfile(
+            event.memberId(),
+            event.nickname()
+    );
+}
+
+// notification.application.event.WelcomeEmailEventHandler.java
+@Async
+@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+public void handleWelcomeEmailSending(MemberAccountRegisteredEvent event) {
+    messageService.sendWelcomeEmail(event.email());
+}
+```
+
+#### (4) 기존의 이벤트 발행 트리거 함수 수정 코드 예시
+```java {18, 19}
+private final ApplicationEventPublisher eventPublisher;
+private final TransactionTemplate transactionTemplate;
+
+public PairTokenResponse login(KakaoSocialLoginCommand command) {
+    SocialUserProfileResult profile = loadKakaoUserProfilePort.load(command.authorizationCode());
+    MemberAccount memberAccount = transactionTemplate.execute(status -> getOrCreateMemberAccount(profile));
+    return commandTokenService.issueTokenPair(new TokenClaimsRequest(memberAccount.getId(), memberAccount.getEmail(), memberAccount.getRole()));
+}
+
+// [파일 내부 트랜잭션 처리] TransactionTemplate 사용
+private MemberAccount getOrCreateMemberAccount(SocialUserProfileResult profile) {
+    SocialAccount socialAccount = querySocialAccountService.findExistingSocialAccount(profile.provider(), Long.valueOf(profile.providerId()))
+                    .orElse(null);
+
+    MemberAccount memberAccount;
+    if (socialAccount != null) {
+        // [Case A] 기존 가입자: 안전하게 기존 객체의 필드 접근
+        memberAccount = queryMemberAccountService.findById(socialAccount.getMemberAccountId());
+    } else {
+        // [Case B] 신규 가입자: 새로운 객체 생성
+        memberAccount = MemberAccount.create(profile.email(), MemberRole.USER);
+        commandMemberAccountService.save(memberAccount);
+
+        // B-1. 이벤트 발생 트리거 함수 호출
+        eventPublisher.publishEvent(new MemberAccountRegisteredEvent(
+            memberAccount.getId(),
+            profile.email(),
+            profile.nickname(),
+            OAuth2Provider.valueOf(profile.provider()),
+            Long.valueOf(profile.providerId()),
+            profile.connectedAt(),
+            profile.emailAgreed(),
+            profile.profileNicknameAgreed()
+        ));
+    }
+
+    return memberAccount;
+}
+```
