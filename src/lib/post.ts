@@ -1,4 +1,4 @@
-import { CategoryDetail, HeadingItem, Post, PostMatter } from '@/config/types';
+import { CategoryDetail, HeadingItem, Post, PostMatter, SearchablePost } from '@/config/types';
 import dayjs from 'dayjs';
 import fs from 'fs';
 import { sync } from 'glob';
@@ -56,7 +56,10 @@ const parsePostDetail = async (postPath: string) => {
   const readingMinutes = Math.ceil(readingTime(content).minutes);
   const dateString = dayjs(grayMatter.date).locale('ko').format('YYYY년 MM월 DD일');
   const isVisible = grayMatter.isVisible !== false;
-  return { ...grayMatter, dateString, content, readingMinutes, isVisible };
+  const tags = grayMatter.tags
+    ? grayMatter.tags.split(',').map((t) => t.trim()).filter(Boolean)
+    : [];
+  return { ...grayMatter, dateString, content, readingMinutes, isVisible, tags };
 };
 
 // category folder name을 public name으로 변경 : dir_name -> Dir Name
@@ -126,6 +129,19 @@ export const getCategoryDetailList = async () => {
   }));
 
   return detailList;
+};
+
+// 검색용 포스트 목록 조회 (content 제외하여 경량화)
+export const getSearchablePostList = async (): Promise<SearchablePost[]> => {
+  const postList = await getSortedPostList();
+  return postList.map(({ title, tags, url, categoryPublicName, dateString, desc }) => ({
+    title,
+    tags,
+    url,
+    categoryPublicName,
+    dateString,
+    desc,
+  }));
 };
 
 // post 상세 페이지 내용 조회

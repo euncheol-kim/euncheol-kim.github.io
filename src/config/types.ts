@@ -9,15 +9,26 @@ export interface PostMatter {
   desc: string;
   isHot?: boolean;
   isVisible?: boolean;
+  tags?: string;
 }
 
-export interface Post extends PostMatter {
+export interface Post extends Omit<PostMatter, 'tags'> {
   url: string;
   slug: string;
   categoryPath: string;
   content: string;
   readingMinutes: number;
   categoryPublicName: string;
+  tags: string[];
+}
+
+export interface SearchablePost {
+  title: string;
+  tags: string[];
+  url: string;
+  categoryPublicName: string;
+  dateString: string;
+  desc: string;
 }
 
 export interface CategoryDetail {

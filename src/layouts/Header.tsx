@@ -9,10 +9,11 @@ import { Button } from '@/components/ui/button';
 import { useSpyElem } from '@/hook/useSpy';
 import ThemeSwitch from '@/layouts/theme/Switch';
 import { cn } from '@/lib/utils';
-import { Github } from 'lucide-react';
+import { useSearch } from '@/components/search/SearchProvider';
+import { Github, Search } from 'lucide-react';
 
 const navList = [
-  { name: 'D5BL5G', href: '/blog' },
+  { name: 'euncheol-kim', href: '/blog' },
   { name: 'About', href: '/about' },
 ];
 
@@ -22,6 +23,7 @@ export const Header = () => {
   const { ref, marginTop } = useSpyElem(65);
   const pathname = usePathname();
   const isLocalePath = localePathList.some((path) => pathname.startsWith(path));
+  const { setIsOpen } = useSearch();
 
   return (
     <nav
@@ -50,10 +52,18 @@ export const Header = () => {
         {/*About Page의 언어 선택기 숨김*/}
         {/* {isLocalePath && <LanguageSelector className='hidden sm:flex' />} */}
 
-        <div className='flex gap-3'>
+        <div className='flex items-center gap-1 sm:gap-3'>
+          <Button
+            variant='ghost'
+            onClick={() => setIsOpen(true)}
+            className='flex items-center gap-1.5 px-2 text-muted-foreground hover:text-primary sm:px-3'
+          >
+            <Search className='size-[1.1rem]' />
+            <span className='hidden text-sm sm:inline'>Search</span>
+          </Button>
           <ThemeSwitch />
           <Button asChild variant='ghost' size='icon'>
-            <Link href='https://github.com/d5br5/nextjs-tailwind-blog' target='_blank'>
+            <Link href='https://github.com/euncheol-kim' target='_blank'>
               <Github className='size-[1.2rem]' />
             </Link>
           </Button>

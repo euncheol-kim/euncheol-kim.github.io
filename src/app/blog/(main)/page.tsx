@@ -11,7 +11,7 @@ const Blog = async () => {
       <div className='mx-auto w-full max-w-[1200px] my-10 px-8' >
       <hr />
       </div>
-      <PostListPage postList={postList.slice(1)} />
+      <PostListPage postList={postList} />
     </section>
   );
 };

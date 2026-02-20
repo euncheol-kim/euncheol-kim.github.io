@@ -54,6 +54,18 @@ const PostCard = ({ post }: Props) => {
                 {post.desc}
               </p>
             )}
+            {post.tags.length > 0 && (
+              <div className='mb-1 line-clamp-1 flex flex-wrap gap-x-2 gap-y-0.5 overflow-hidden'>
+                {post.tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className='text-[11px] text-gray-400 dark:text-gray-500'
+                  >
+                    #{tag}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
           <div className='flex justify-between gap-3 text-xs text-gray-500 dark:text-gray-400 sm:text-sm'>
             <div className='flex items-center gap-1'>

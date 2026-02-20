@@ -24,6 +24,18 @@ export const PostHeader = ({ post }: Props) => {
           {post.categoryPublicName}
         </Link>
       </div>
+      {post.tags.length > 0 && (
+        <div className='mb-3 flex flex-wrap justify-center gap-2'>
+          {post.tags.map((tag) => (
+            <span
+              key={tag}
+              className='text-xs text-gray-400 dark:text-gray-500'
+            >
+              #{tag}
+            </span>
+          ))}
+        </div>
+      )}
       <div className='flex justify-center gap-3 text-sm text-gray-500 dark:text-gray-400'>
         <div className='flex items-center gap-1'>
           <CalendarDays className='w-3.5' />
