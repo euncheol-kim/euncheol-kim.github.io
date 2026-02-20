@@ -164,7 +164,7 @@ public PairTokenResponse login(KakaoSocialLoginCommand command) {
 ```
 
 
-#### <span id="ocp-violation">(1) OCP 위배 이유](#ocp-violation)</span>
+#### <span id="ocp-violation">[(1) OCP 위배 이유](#ocp-violation)</span>
 : 메시지를 보내야하는 기능을 추가하고자 하면, <u>기존에 작성된 핵심 비즈니스 로직인 login() 함수를 수정</u>해야 합니다. 이는 OCP를 위배합니다.
 
 #### <span id="logical-coupling-violation">[(2) 논리적 강결함 증가 이유](#logical-coupling-violation)</span>
