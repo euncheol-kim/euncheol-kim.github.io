@@ -1,6 +1,7 @@
 import { CategoryDetail, HeadingItem, Post, PostMatter, SearchablePost } from '@/config/types';
 import dayjs from 'dayjs';
 import fs from 'fs';
+import GithubSlugger from 'github-slugger';
 import { sync } from 'glob';
 import matter from 'gray-matter';
 import path from 'path';
@@ -154,19 +155,17 @@ export const getPostDetail = async (category: string, slug: string) => {
 export const parseToc = (content: string): HeadingItem[] => {
   const regex = /^(##|###) (.*$)/gim;
   const headingList = content.match(regex);
+  const slugger = new GithubSlugger();
+
+  const stripHtml = (str: string) => str.replace(/<[^>]*>/g, '').trim();
+
   return (
-    headingList?.map((heading: string) => ({
-      text: heading.replace('##', '').replace('#', ''),
-      link:
-        '#' +
-        heading
-          .replace('# ', '')
-          .replace('#', '')
-          .replace(/[\[\]:!@#$/%^&*()+=,.]/g, '')
-          .replace(/ /g, '-')
-          .toLowerCase()
-          .replace('?', ''),
-      indent: (heading.match(/#/g)?.length || 2) - 2,
-    })) || []
+    headingList?.map((heading: string) => {
+      const indent = (heading.match(/#/g)?.length || 2) - 2;
+      const rawText = heading.replace(/^###?\s/, '');
+      const text = stripHtml(rawText);
+      const link = '#' + slugger.slug(text);
+      return { text, link, indent };
+    }) || []
   );
 };
