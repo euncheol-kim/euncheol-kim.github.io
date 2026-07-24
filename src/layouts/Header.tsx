@@ -14,7 +14,8 @@ import { Github, Search } from 'lucide-react';
 
 const navList = [
   { name: 'euncheol-kim', href: '/blog' },
-  { name: 'About', href: '/about' },
+  // About 탭 임시 숨김 — 차후 수정 후 재노출 예정
+  // { name: 'About', href: '/about' },
 ];
 
 const localePathList = ['/about'];
