@@ -1,0 +1,706 @@
+---
+title:  "코어 자바스크립트의 \"Javascript 기본\" 정리"
+desc: 코어 자바스크립트의 "Javascript 기본"을 읽고 정리한 내용입니다.
+date: 2026-07-24
+thumbnail: ./thumbnail.png
+isHot: false
+isVisible: true
+tags: Javascript, ES6
+---
+
+#### 학습 자료: https://ko.javascript.info/first-steps
+#### 자바스크립트 코어의 권장 컨벤션 : https://ko.javascript.info/coding-style 
+
+<br/>
+
+## 1. Javascript는 환경에 따른 한정 명령어가 있다.
+ Javascript는 사용하는 환경에 따라 지원되지 않는 명령어가 있을 수 있다.
+이를 구분하는 것은 ES6를 학습하는데 있어서 중요한 요소로 판단이 든다.
+예를 들어, 브라우저 한정 명령어의 종류 중 하나는 alert() 명령어가 있다.
+
+## 2. 문(Statement)
+ 문(Statement)는 <u><strong>최소 실행 명령</strong></u>을 뜻한다.
+값을 만들어내는 표현식(Expression)과 달리 문은 <u><strong>행동</strong></u>이나 <u><strong>동작</strong></u>을 지시한다.
+
+## 3. 엄격모드(Strict Mode)
+```javascript
+"use strict";
+// 이 코드는 모던한 방식으로 실행됩니다.
+```
+ Javascript의 초기 버전에는 개발자의 실수나 불안정한 결정이 많이 있었다.
+ES5에서는 엄격 모드를 지원하며 활성화를 할 경우, 스크립트 전체가 <strong>모던</strong>한 방식으로 동작하게 된다.
+엄격 모드를 활성화 하지 않는 경우 기본 모드라고 하며, 기본 모드는 이전 버전의 호환성을 유지해준다.
+
+조금은 중요할 수 있는 포인트는 아래와 같다.
+![](./strict_mode_point.png) <br />
+
+엄격 모드가 적용된 모던 자바스크립트는 "클래스"와 "모듈"이라 불리는 진일보한 구조를 제공한다.
+따라서, 특정 환경에서 클래스와 모듈을 사용하기를 원한다면 엄격 모드는 반드시 활성화 되어야 한다.
+
+## 4. 자료형
+| 자료형 | 설명 | 특징
+|---|---|---|
+| 숫자(Number) | 정수 및 부동소수점 숫자 | (2^53-1)(9007199254740991) 보다 큰 값 혹은 -(2^53-1) 보다 작은 정수의 표현 |
+| 숫자(BigInt) | 아주 높은 정밀도를 유지하는 정수 | 길이에 상관없이 정수를 나타낼 수 있으며, 값의 뒤에 n을 붙이면 BigInt 타입으로 변환 (IE에서는 지원하지 않음에 유의)|
+| 문자열(String) | 텍스트 데이터 | 문자열은 큰따옴표(”)나 작은따옴표(‘)로 감싸서 표현 |
+| 불리언(Boolean) | true 또는 false | 조건문이나 반복문에서 참/거짓을 판단하는 데 사용 |
+| 객체(Object) | 키-값 쌍의 집합 | 객체는 중괄호({})로 감싸서 표현 |
+| 배열(Array) | 순서가 있는 데이터 집합 | 배열은 대괄호([])로 감싸서 표현 |
+| 함수(Function) | 작업을 수행하는 코드 블록 | 함수는 함수 표현식이나 함수 선언식으로 정의 |
+| undefined | 값이 할당되지 않은 상태 | 변수가 선언되었지만 값이 할당되지 않은 상태 |
+| null | 값이 없음을 의미하는 객체 | 값이 없음을 의미하는 객체 |
+| Symbol | 고유하고 변경 불가능한 값 | 고유하고 변경 불가능한 값 |
+
+## 5. 인수의 자료형 반환 -> typeof 연산자
+```javascript
+typeof undefined // "undefined"
+typeof 0 // "number"
+typeof 10n // "bigint"
+typeof true // "boolean"
+typeof "foo" // "string"
+typeof Symbol("id") // "symbol"
+typeof NaN // "number"
+typeof Math // "object" 
+typeof null // "object" 
+typeof alert // "function" 
+```
+typeof 연산자는 인수의 자료형을 반환하며 `typeof x`와 `typeof(x)`를 지원한다.
+
+ <font color="steelblue"><b>⚠️ typeof의 주의사항</b></font>
+|값의 형태| typeof 연산자의 반환값 | 설명
+|---|---|---|
+| null | object | null은 별도의 고유한 자료형을 가지는 특수 값으로, 객체가 아니다. <br/>이는 언어 자체의 오류이지만 하위 호환성을 위해 남겨둔 상황이다. |
+| 함수 | function | 피연산자가 함수이면 `function`을 그대로 반환한다. <br/>하지만 Javascript의 함수형은 없고 함수형 또한 객체형에 속한다. 이러한 동작이 잘못되긴 했으나, 아주 오래전에 만들어진 규칙이고 하위 호환성 유지 및 특징의 유용성 때문에 남겨둔 상태이다. |
+| 내장 객체 | obejct | Javascript의 내장 객체는 object로 출력된다. 대표적으로 연산을 도와주는 Math가 있다. |
+| NaN | number | NaN은 `계산 중에 에러가 발생`했다는 것을 나타낸다. |
+
+## 6. Boolean 형변환 예시
+```javascript
+alert( Boolean(1) ); // 숫자 1(true)
+alert( Boolean(0) ); // 숫자 0(false)
+
+alert( Boolean("hello") ); // 문자열(true)
+alert( Boolean("") ); // 빈 문자열(false)
+```
+값이 있는 문자열을 Boolean으로 형변환 할 경우 true를,
+빈 문자열을 Boolean으로 형변환한다면 false가 되는 것을 기억한다.
+
+## ⭐️ 7. 비교 연산에 대한 설명
+Javascript에서 가장 헷갈리는 부분이다.
+
+|연산자 정의|연산자|
+|---|---|
+| 동등 연산자 | == |
+| 일치 연산자 | === |
+| 부등 연산자 | != |
+| 불일치 연산자 | !== |
+
+### 7-1. 다른 형을 가진 값 간의 비교
+ Javascript는 <font color="Salmon"><b>비교하려는 값의 자료형이 다르면, 값들을 숫자형으로 바꾼다.</b></font>
+
+[1] 문자열과 숫자형의 비교
+ ```javascript
+alert( '2' > 1 ); // true, 문자열 '2'가 숫자 2로 변환된 후 비교가 진행된다.
+alert( '01' == 1 ); // true, 문자열 '01'이 숫자 1로 변환된 후 비교가 진행된다.
+ ```
+ <br/>
+
+[2] 불리언값과 숫자형의 비교
+ ```javascript
+alert( true == 1 ); // true, Boolean값 true는 1로 변환되고 비교가 이루어진다.
+alert( false == 0 ); // true, Boolean값 false는 0로 변환되고 비교가 이루어진다.
+ ```
+ <br/>
+
+
+ [3] 흥미로운 상황
+ 1. 논리 평가와 동등 비교(`==`) 연산
+ ```javascript
+let a = 0;
+alert( Boolean(a) ); // false, 논리 평가
+
+let b = "0";
+alert( Boolean(b) ); // true, 논리 평가
+
+alert(a == b); // true!, 동등 비교 연산
+```
+<font color="steelblue">논리 평가</font>시 값은 false와 true가 나온다. 하지만 <font color="steelblue">동등 비교 연산(==)</font>을 하면 true가 나온다.
+
+동등 비교 연산자 `==`는 피연산자를 숫자형으로 바꾸지만, (예: 문자열 "0"을 0으로 변환 시키는 것) 
+`Boolean`을 사용한 <font color="steelblue">명시적 변환</font>에는 다른 규칙이 사용되기 때문이다.
+
+---
+
+2. 일치 연산자(`===`, `!==`)
+```javascript
+alert( 0 == false ); // true, 불리언값을 동등 비교 연산자를 사용하면 숫자형 0이 된다.
+alert( '' == false ); // true, 빈문자열에서 동등 비교 연산자를 사용하면 숫자형 0이 된다.
+```
+동등 연산자 `==`는 0과 false를 구별하지 못한다. 이는 피연산자가 빈 문자열 일 때도 같은 문제가 발생한다. 
+<br/>
+
+```javascript
+alert( 0 === false ); // false, 피연산자의 형이 다르기 때문이다.
+alert( 0 !== false); // true, 피연산자의 형이 다르기 때문이다. 
+```
+일치 연산자 `===`는 <b><u>형 변환 없이 값을 비교</u></b>한다. <b><u>일치 연산자는 엄격한 동등 연산자</u></b>이다.
+<b><u>자료형의 동등 여부까지 검사하기 때문에 피연산자 a와 b의 형이 다를 경우 `a === b`는 즉시 `false`를 반환한다.</u></b>
+
+---
+
+3. ⭐️ null과 undefined
+```javascript
+alert(null === undefined) // false, null은 Null타입으로, undefined는 Undifiend타입으로 평가된다. 
+alert( null == undefined ); // true
+```
+(1)
+`null`과 `undefined`의 일치 동등 비교 연산 `===`의 경우 false로 평가된다.
+`typeof null`은 `object`로 평가가 되어지는데  그러면 일치 비교 연산자에서 피연산자 `null`은 `obejct`인가?
+아니다. `typeof`에서 평가되는 값과 일치 비교 연산자에서 사용되는 `null`은 서로 다르게 동작한다.
+일치 비교 연산자에서의 `null`값은 `Null타입`으로 평가가 되어짐을 유의한다. 매우 중요한 포인트이다.
+
+(2)
+`null`과 `undefined`의 비교 연산 `==`의 경우 true로 평가된다.
+Javascript규칙상 <b><u>비교 동등 연산자인 경우는 null과 undefined는 형 변환을 하지 않는다.</u></b>
+<b><u>그렇다면 `null`과 `undefined`값의 비교에 따라 `false`로 평가되어야 할 것 같지만, 이 비교는 특별한 규칙이 적용되어 `true`가 반환된다. 기억하자.</u></b>
+
+---
+
+4. 동등 비교 연산자들의 동작 방식이 다름이 있다.
+(1) 피연산자 값이 null인 경우
+```javascript
+alert( null > 0 );  // (1) false
+alert( null == 0 ); // (2) false
+alert( null >= 0 ); // (3) true
+```
+조금만 생각해보면 위의 결과가 논리적으로 납득이 되지 않는다.
+결과부터 말하면 동등 연산자 `==`와 기타 비교 연산자 `<`, `>`, `<=`, `>=`의 동작 방식이 다르기 때문이다.
+<b><u>기타 비교 연산자의 피연산자 `null`은 0으로, 동등 비교 연산자의 피연산자 `null`은 null로 평가된다.</u></b>
+
+|동등 연산자|피연산자 null 값의 변경 여부| 피연산자의 값 
+|---|---|---|
+| 비교 동등 연산자 | X | null |
+| 기타 동등 연산자 | O | 0 |
+
+(2) 피연산자 값이 undefined인 경우
+```javascript
+alert( undefined > 0 ); // false (1)
+alert( undefined < 0 ); // false (2)
+alert( undefined == 0 ); // false (3)
+```
+undefined는 `null`이나 `undefined`와 같고, 그 이외의 값과는 같지 않다.
+앞서 이야기했지만 동등 비교 연산자로 `null == undefined`를 비교하면 이는 특별한 규칙이 적용되어 `true`가 반환된다.
+
+(3) 결론
+명확한 의도가 없다면, 비교 연산자에 null과 undefined가 오지 않도록 코드를 작성하는게 좋다.
+또는 일치 동등/기타 연산자를 이용해 비교하는 것이 예상하지 못한 오류의 방지에 도움이 될 것이다.
+아래 이미지는 참고만 하는 자료로 확인한다. 
+![](./null_and_undefined_equal_operation.png)
+
+## ⭐️ 8. Truthy와 Falsy를 이용한 단축 평가
+이 내용은 Javascript의 내용이 아닐 수도 있다. 하지만 매우 중요한 개념이기 때문에 작성하게 되었다.
+설명은 React의 JSX를 기반으로 하여 설명한다.
+
+배경지식:
+Javascript는 <font color="steelblue">조건문</font>이나 <font color="steelblue">논리 연산자</font>에서 <font color="steelblue">Boolean이 아닌 값도 참이나 거짓으로 평가</font>한다.
+
+| 구분 | 설명 |판별 값 | 평가 예시 |
+|---|---|---|---|
+| Truthy | 참 값은 값 | true | Falsy를 제외한 모든 값(예: [], {}, 42, "0", "false") |
+| Falsy | 거짓 같은 값 | faluse | false, 0, -0, ""(빈 문자열), null, undefined, NaN |
+<br/>
+
+React JSX에서는 사용자의 로그인 상태에 따른 UI 컴포넌트를 다르게 보여줄 필요성이 있다.
+JSX 내부에서 if-else 문을 사용할 수 있지만, 이를 사용할 경우 코드의 가독성이 매우 떨어지게 된다.
+이러한 상황에서 Truth와 Falsy를 사용하면 코드의 간결한 코드를 작성할 수 있다.
+
+| 논리 연산자 <br/> 또는 예시 코드의 결합 | 평가 값(출력 값 또는 범위) | 설명 |
+|---|---|---|
+| true && experession | expression | 첫 번째 값이 true이면 experession을 평가한다. |
+| false && experession | false | 첫 번째 값이 false이므로 expression을 평가하지 않는다. |
+| "Hello" && "world" | world | 첫 번째 값이 Truthy이기 때문에 뒤의 평가 값인 world를 출력한다. |
+| 0 && "world" | 0 | 첫 번째 값이 Falsy이기 때문에, 평가를 중지하고 0을 출력한다. |
+| true \|\| expression | true | 첫 번째 값이 true이므로 뒤의 값을 평가하지 않는다. |
+| false \|\| expression | expression | 첫 번째 값이 false이므로 두 번째 값을 평가한다. |
+
+예시 코드:
+```javascript
+import React from 'react';
+
+const UserProfile = ({ user, unreadMessagesCount }) => {
+  return (
+    <div>
+      {/* 
+        [삼항 연산자 활용] 
+        user 객체가 존재하면(Truthy) 환영 메시지를, 없으면(Falsy) 로그인 유도 메시지를 렌더링합니다. 
+      */}
+      {user ? (
+        <h2>환영합니다, {user.name}님!</h2>
+      ) : (
+        <h2>로그인이 필요합니다.</h2>
+      )}
+
+      {/* 
+        [논리 AND (&&) 활용] 
+        unreadMessagesCount가 0보다 클 때만(Truthy) 알림 배지를 렌더링합니다.
+        조건이 Falsy라면 false가 반환되어 JSX가 아무것도 렌더링하지 않습니다.
+      */}
+      {unreadMessagesCount > 0 && (
+        <span className="badge">새 메시지 {unreadMessagesCount}개</span>
+      )}
+
+      {/* 
+        [논리 OR (||) 활용]
+        user.bio가 빈 문자열("")이나 null이면 Falsy로 평가되어 뒤의 기본 텍스트를 렌더링합니다.
+      */}
+      <p>{user?.bio || "등록된 자기소개가 없습니다."}</p>
+    </div>
+  );
+};
+
+export default UserProfile;
+```
+
+<Callout type="info"> <b> 옵셔널 체이닝: `?`연산자</b>
+옵셔널 체이닝은 참조가 null 또는 undefined일 수 있는 상황에서 안전하게 객체의 속성에 접근할 수 있게 해준다. 옵셔널 체이닝은 객체 변수 뒤에 `?`연산자를 붙여 사용한다. <br/>
+문제 가정 상황: 
+`user.bio`를 코드 내부에서 사용했고, user 객체의 값이 null이거나 undefined인 경우의 코드를 가정해보자. 이 가정된 코드를 읽을 시점이 오면 user는 null이거나 undefined가 되어질 것이고,
+이후 내부 property인 bio를 읽을 때 `TypeError: Cannot read properties of undefined`가 발생하여 코드의 실행이 멈추게 되는 상황이 발생된다. <br/>
+해결 방법:
+옵셔널 체이닝을 사용한다. 객체가 null 또는 undefined라면, 그 즉시 객체의 속성 접근을 시도하지 않는다.</Callout>
+
+## ⭐️ 9. 옵셔널 체이닝 연산과 Null 병합 연산자
+| 연산구분 | 사용예시 | 설명 |
+|---|---|---|
+| 옵셔널 체이닝 | 객체인 user와 속성값 bio가 있다고 가정한다. <br/> `user?.bio` | user가 null 또는 undefined라면 그 즉시 코드 실행을 멈춘다. 이는 `TypeError: Cannot read properties of undefined`의 방지를 돕는다. |
+| Null 병합 연산자 | `왼쪽 값 ?? 오른쪽 값` | <b><u>왼쪽 값이 null 또는 undefined일 때:</u></b> 오른쪽 값을 반환 <br/> <b><u>왼쪽 값이 그 외의 정상적인 값일 때:</u></b> 왼쪽 값을 그대로 반환|
+<br/>
+활용 방법:
+```javascript
+// user가 null이거나 bio가 없으면, 에러 없이 안전하게 "소개글이 없습니다"를 선택한다.
+const bio = user?.bio ?? "소개글이 없습니다.";
+```
+
+## 10. 삼항 연산자에서의 주의점
+```javascript
+for(let i = 0; i < 10; i++) {
+    (i > 5) ? alert(i) : continue; // 여기에 continue를 사용하면 안 된다.
+}
+```
+삼항 연산자에서 우측 피연산자 값에 `break`나 `continue`문이 올 수 없다.
+
+## 11. 함수
+함수는 프로그램을 구성하는 주요 '구성 요소(building block)'이다. 
+함수를 이용하면 중복 없이 유사한 동작을 하는 코드를 여러 번 호출할 수 있다.
+
+### 11-1. 함수의 선언
+```javascript
+function showMessage() {
+    alert("안녕하세요.");
+}
+
+function showMessage(from, text) {
+  alert(from + ': ' + text);
+}
+```
+
+### 11-2. 매개 변수가 있는 함수
+[1] 매개 변수가 생략되어진 경우
+```javascript
+function showMessage(from, text) {
+  alert(from + ': ' + text);
+}
+
+showMessage("Euncheol"); // Euncehol: undefined
+```
+매개 변수 값을 생략하고 호출하면 생략된 매개 변수의 값은 `undefined`가 된다.
+
+[2] 매개 변수에 default 값을 넣는 방법
+```javascript
+function showMessage(from, text="Empty message!!") {
+  alert(from + ': ' + text);
+}
+
+showMessage("Euncheol"); // Euncehol: Empty message!!
+showMessage("Euncheol", "Hello Dev"); // Euncehol: Hello Dev
+```
+함수 선언시, 매개 변수에 `=`연산을 이용하여 값을 넣어주었다고 가정한다.
+함수 호출시, 매개 변수를 생략한다면 `=`연산으로 들어간 값이 출력된다.
+함수 호출시, 매개 변수를 생략하지 않고 값을 넣어준다면 넣어 준 값으로 출력한다.
+
+[3] 매개 변수에 함수를 넣는 방법
+```javascript
+function getMessage() {
+    console.log("Hello GetMessage function..");
+}
+
+function sendMessageA(from, text=getMessage()){
+    console.log("SendMessageA Call");
+}
+
+function sendMessageB(from, text=getMessage()){
+    console.log("SendMessageB Call");
+    getMessage();
+}
+
+sendMessageA("Euncheol");
+console.log(" ");
+sendMessageB("Euncehol");
+
+/* Response:
+*   Hello GetMessage function..
+*   SendMessageA Call
+*
+*   Hello GetMessage function..
+*   SendMessageB Call
+*   Hello GetMessage function..
+*/
+```
+함수 선언시, 매개 변수에 `=`연산을 이용하여 함수의 값을 넣어주었다고 가정한다.
+함수 호출시, 매개 변수를 생략한다면 anotherFunction()가 호출된다.
+함수 호출시, 매개 변수를 생략하지 않는다면 anotherFunction()는 호출되지 않는다. 반환 값이 text값이 된다.<br/>
+
+Response처럼 값이 나오는 이유에 대해서 설명한다.
+Javascript엔진은 함수가 호출 되었을 때, <font color="steelblue"> 함수 본문(\{ ... \})의 코드를 실행하기 전에 선언된 매개변수들을 왼쪽에서 오른쪽 순서로 먼저 초기화한다. </font>
+만약, 매개 변수의 값이 생략되지 않는다면 기본값 자리에 있는 표현식(함수 호출 포함)을 아예 평가(실행)하지 않고 완전히 무시한다.
+
+### 11-3. 함수 응용 코드
+```javascript
+// 매개변수가 생략되었거나 빈 문자열("")이 넘어오면 변수에 '빈 문자열'이 할당됩니다.
+function showMessage(text) {
+  text = text || '빈 문자열'; // Truthy 평가에 의거
+  ...
+}
+
+// 매개변수 'count'가 `undefined` 또는 `null`이면 'unknown'을 출력해주는 함수
+function showCount(count) {
+  alert(count ?? "unknown"); // Null 병합 연산자에 의거
+}
+
+showCount(0); // 0
+showCount(null); // unknown
+showCount(); // unknown
+```
+
+### 11-4. 함수의 반환값
+```javascript
+-----------------------------------
+function sum(a, b) {
+  return a + b;
+}
+
+let result = sum(1, 2);
+alert( result ); // 3
+-----------------------------------
+function checkAge(age) {
+  if (age >= 18) {
+    return true;
+  } else {
+    return confirm('보호자의 동의를 받으셨나요?');
+  }
+}
+
+let age = prompt('나이를 알려주세요', 18);
+
+if ( checkAge(age) ) {
+  alert( '접속 허용' );
+} else {
+  alert( '접속 차단' );
+}
+-----------------------------------
+```
+(1) <b><u>checkAge(age)에 18보다 작은 수를 넣었을 때의 동작 방식</u></b>
+ \- prompt 팝업창을 통해 나이를 입력한다.
+ \- checkAge(age)가 호출이 되고, confirm 팝업창인 "보호자의 동의를 받으셨나요"가 출력된다.
+ \- 확인을 누른다면 "접속 허용" 팝업이 나오고, 취소를 누른다면 "접속 차단" 팝업이 나온다. <br/>
+
+핵심정리: 
+ \- if문 안에 함수를 넣을 수 있음을 기억한다. 
+ \- if문 안에 함수가 들어가면, 함수가 호출되면서 함수의 반환 Boolean을 응답 받는다.
+ \- Boolean 응답값을 통해 if문을 다시 처리한다.
+
+## 12. ⭐️ 함수 표현식
+자바스크립트는 함수를 특별한 종류의 `값`으로 취급합니다. 다른 언어에서처럼 "특별한 동작을 하는 구조"로 취급되지 않는다.
+
+---
+
+```javascript
+ let sayHi = function() {
+  alert( "Hello" );
+};
+ ```
+함수를 생성하고 변수에 값을 할당하는 것처럼 함수가 변수에 할당되었다.
+함수가 어떤 방식으로 만들어졌는지에 관계없이 함수는 값이고, 따라서 변수에 할당할 수 있다.
+위 예시에선 함수가 변수 sayHi에 저장된 값이 되었다.
+
+---
+
+```javascript
+function sayHi() {
+  alert( "Hello" );
+}
+
+alert( sayHi ); // 함수 코드가 보임
+```
+마지막 줄에서 sayHi옆에 괄호가 없기 때문에 함수는 실행되지 않는다. 
+어떤 언어에선 괄호 없이 함수 이름만 언급해도 함수가 실행된다. 하지만 자바스크립트는 괄호가 있어야만 함수가 호출된다.
+
+---
+
+```javascript
+function sayHi() {   // (1) 함수 생성
+  alert( "Hello" );
+}
+
+let func = sayHi;    // (2) 함수 복사
+
+func(); // Hello     // (3) 복사한 함수를 실행(정상적으로 실행됩니다)!
+sayHi(); // Hello    //     본래 함수도 정상적으로 실행됩니다.
+```
+함수는 특별한 값이기 때문에, 변수를 복사해 다른 변수에 할당하는 것처럼 함수를 복사해 다른 변수에 할당이 가능하다.
+
+## 13. ⭐️ 일급 객체
+콜백 함수를 이해하기 위해서는 일급 객체를 이해해야 한다.
+함수가 일급 객체라는 의미는 함수를 단순한 동작의 묶음이 아니라, 일반적인 값(데이터)처럼 다룰 수 있다는 뜻이다.
+
+일급 객체의 3대 조건
+| 특징 | 설명 |
+|---|---|
+| 변수나 데이터 구조에 할당 가능 | 객체를 변수에 저장하거나 배열/객체 등에 담을 수 있다. |
+| 함수의 매개변수(인자)로 전달 가능 | 객체를 다른 함수의 인자로 넘길 수 있다. |
+| 함수의 반환값으로 사용 가능 | 함수가 실행을 끝내고 객체를 결과값으로 반환할 수 있다. |
+
+## 14. ⭐️ 콜백 함수
+콜백은 "나중에 호출한다."라는 의미를 가진다.
+콜백 함수란 다른 함수의 매개변수로 전달되어, 그 외부 함수 내부에서 특정 시점이나 조건이 충족되었을 때 실행되는 함수를 말한다. 
+내가 함수를 직접 실행(`()`)하는 것이 아니라, 해당 함수를 필요로 하는 다른 함수에게 실행에 대한 '제어권'을 넘겨주는 것이 핵심이다.<br/>
+
+```javascript
+--------------------------------------------------------------------------------
+// (ex:1)
+function ask(question, yes, no) {
+  if (confirm(question)) yes()
+  else no();
+}
+
+function showOk() {
+  alert( "동의하셨습니다." );
+}
+
+function showCancel() {
+  alert( "취소 버튼을 누르셨습니다." );
+}
+
+// 사용법: 함수 showOk와 showCancel가 ask 함수의 인수로 전달
+ask("동의하십니까?", showOk, showCancel);
+--------------------------------------------------------------------------------
+// (ex:2)
+function ask(question, yes, no) {
+  if (confirm(question)) yes()
+  else no();
+}
+
+ask(
+  "동의하십니까?",
+  function() { alert("동의하셨습니다."); }, // 익명 함수
+  function() { alert("취소 버튼을 누르셨습니다."); } // 익명 함수
+);
+--------------------------------------------------------------------------------
+```
+이름 없이 선언한 함수는 익명함수라고 한다.
+<b>ex:2</b>에 해당하는 코드에서의 익명 함수는 변수에 할당된 게 아니기 때문에, ask 바깥에선 접근할 수 없다.
+
+## 15. 함수 표현식과 함수 선언문
+```javascript
+// 함수 선언문
+function sum(a, b) {
+  return a + b;
+}
+
+// 함수 표현식
+let sum = function(a, b) {
+  return a + b;
+};
+```
+| 구분 | 설명 |
+|---|---|
+| 함수 선언문 | 함수는 주요 코드 흐름 중간에 독자적인 구문 형태로 존재한다. |
+| 함수 표현식 | 함수는 표현식이나 구문 구성(syntax construct) 내부에 생성된다. <br/>위의 예시에선 함수가 할당 연산자 =를 이용해 만든 “할당 표현식” 우측에 생성한다. |
+
+### 15-1. 함수 표현식과 함수 선언문의 차이
+
+<font color="Salmon">[첫 번째 차이]</font> <b><u>함수 선언문과 함수 표현식의 차이는 자바스크립트 엔진이 언제 함수를 생성하는지에 있다.</u></b>
+<font color="steelblue"> 함수 표현식</font>은 실제 실행 흐름이 해당 함수에 도달했을 때 함수를 생성한다. 따라서 실행 흐름이 함수에 도달했을 때부터 해당 함수를 사용할 수 있다. <font color="steelblue"> 함수 선언문</font>은 함수 선언문이 정의되기 전에도 호출할 수 있다.<br/><br/>
+
+```javascript
+sayHi("John"); // Hello, John
+
+function sayHi(name) {
+  alert( `Hello, ${name}` );
+}
+```
+위 코드의 동작은 <b>함수 선언문의 동작은 자바스크립트의 내부 알고리즘 때문에 가능하다.</b>
+자바스크립트는 스크립트를 실행하기 전, 준비단계에서 전역에 선언된 함수 선언문을 찾고, 해당 함수를 생성한다. 
+스크립트가 진짜 실행되기 전 "초기화 단계"에서 함수 선언 방식으로 정의한 함수가 생성되는 것이다.
+
+<font color="Salmon">[두 번째 차이]</font> <b><u>스코프이다.</u></b>
+엄격 모드에서 함수 선언문이 코드 블록 내에 위치하면 해당 함수는 블록 내 어디서든 접근할 수 있다. 하지만 블록 밖에서는 함수에 접근하지 못한다.
+```javascript
+----------------------------------------------------------------------
+let age = prompt("나이를 알려주세요.", 18);
+
+// 조건에 따라 함수를 선언
+if (age < 18) {
+  function welcome() {
+    alert("안녕!");
+  }
+
+} else {
+  function welcome() {
+    alert("안녕하세요!");
+  }
+}
+
+welcome(); // Error: welcome is not defined
+----------------------------------------------------------------------
+let age = 16; // 16을 저장했다 가정합시다.
+
+if (age < 18) {
+  welcome();               // \   (실행)
+                           //  |
+  function welcome() {     //  |
+    alert("안녕!");         //  |  함수 선언문은 함수가 선언된 블록 내
+  }                        //  |  어디에서든 유효하다.
+                           //  |
+  welcome();               // /   (실행)
+
+} else {
+
+  function welcome() {
+    alert("안녕하세요!");
+  }
+}
+
+// 여기는 중괄호 밖이기 때문에
+// 중괄호 안에서 선언한 함수 선언문은 호출할 수 없습니다.
+
+welcome(); // Error: welcome is not defined
+```
+
+<br/>
+
+그러면 if문 밖에서 welcome 함수를 호출 할 방법은 없는가?
+존재한다. 함수 표현식을 사용하면 된다. if문 밖에 선언한 welcome에 함수 표현식으로 만든 함수를 할당하면 된다.
+```javascript
+let age = prompt("나이를 알려주세요.", 18);
+
+let welcome;
+
+if (age < 18) {
+
+  welcome = function() {
+    alert("안녕!");
+  };
+
+} else {
+
+  welcome = function() {
+    alert("안녕하세요!");
+  };
+
+}
+
+welcome(); // 제대로 동작한다.
+
+// 물음표 연산자를 사용할 경우, 위의 코드를 아래처럼 간단히 작성할 수 있다.
+/*
+* let age = prompt("나이를 알려주세요.", 18);
+*
+* let welcome = (age < 18) ?
+*  function() { alert("안녕!"); } :
+*  function() { alert("안녕하세요!"); };
+*
+* welcome();
+**/
+```
+
+🌱 용어 정의:
+표현식 (Expression): 평가(Evaluation)되어 하나의 '값'으로 귀결되는 코드이다.
+문 (Statement): 프로그램에게 무언가를 하라고 지시하는 '명령(행동)'이다. 값을 만들어내지 않을 수도 있다.
+
+<br/>
+
+🌱 표현식 종류:
+| 표현식 종류 | 설명 |
+|---|---|
+| 리터럴 표현식 | 함그 자체로 값인 것 (10, "Hello", true) |
+| 연산자 표현식 | 연산을 통해 값을 만들어내는 것 (1 + 2, a === b) |
+| 변수 식별자 표현식 | 변수 이름 자체도 평가되면 값을 반환하므로 표현식이다. (myVariable) |
+| 함수 호출 표현식 | 함수가 실행된 후 반환값(Return value)으로 평가되므로 표현식이다. |
+
+<br/>
+
+🌱 <b>변수 식별자 표현식</b>과 <b>함수 호출 표현식</b>의 예시코드
+```javascript
+// (1) 변수 식별자 표현식
+// 1. 할당(Statement): 메모리에 100을 넣고 'price'라는 이름표를 붙입니다.
+const price = 100;
+
+// 2. 식별자 표현식의 평가 과정:
+// 엔진은 아래 코드를 읽을 때 price라는 글자 대신, 메모리에서 100을 꺼내와 평가합니다.
+// 즉, 내부적으로 console.log(100 + 50); 으로 치환되어 실행됩니다.
+console.log(price + 50);
+------------------------------------------------------------------------
+function calculateTax() {
+    return 10;
+}
+
+function doNothing() {
+    // return이 생략되었습니다.
+}
+
+// 1. 함수 호출 표현식이 값으로 평가되는 과정
+// 엔진은 calculateTax()를 실행하고, 반환된 10으로 이 자리를 치환(평가)합니다.
+// 즉, const total = 100 + 10; 이 됩니다.
+const total = 100 + calculateTax(); 
+
+// 2. return이 없는 함수 호출의 평가
+// 엔진은 doNothing()을 실행하지만 반환값이 없으므로 undefined로 치환(평가)합니다.
+const result = doNothing(); // result에는 undefined가 할당됩니다.
+```
+
+## 16. 화살표 함수 기본
+함수 표현식보다 단순하고 간결한 문법으로 함수를 만들 수 있는 방법이다.
+화살표 함수(arrow function)을 사용하면 된다.
+
+예시 코드:
+```javascript
+
+// (1) 파라메터를 2개 받는 경우
+let sum = (a, b) => a + b;
+alert ( sum(1,2) ); // 3
+
+// (2) 파라메터를 1개 받는 경우
+let double = n => n * 2;
+alert( double(3) ); // 6
+
+// (3) 파라메터가 없는 경우
+let sayHi = () => alert("안녕하세요!");
+sayHi();
+
+// (4) 삼항 연산자에 화살표 함수 사용하기
+let age = prompt("나이를 입력하세요.", 18);
+let welcome = (age < 18) ?
+    () => alert("안녕") :
+    () => alert("안녕하세요.");
+welcome();
+
+// (5) 본문이 여러 줄인 화살표 함수
+let sum = (a,b) => {
+    let result = a + b;
+    return result;
+}
+alert( sum(1,2) ) // 3
+
+
+```

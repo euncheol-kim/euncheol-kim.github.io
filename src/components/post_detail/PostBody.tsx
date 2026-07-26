@@ -33,7 +33,7 @@ export const PostBody = ({ post }: Props) => {
               // @ts-ignore
               rehypePrettyCode,
               {
-                theme: { dark: 'material-theme-palenight', light: 'material-theme-lighter' },
+                theme: { dark: 'one-dark-pro', light: 'github-light' },
                 getHighlighter,
               },
             ],

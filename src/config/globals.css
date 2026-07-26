@@ -108,3 +108,43 @@
 .dark .prose :not(pre) > code {
   color: #ff7b72;
 }
+
+/* 이미지와 본문 간격 축소 — 이미지 문단 및 바로 앞뒤 문단의 맞닿는 여백만 좁힘
+   (본문 문단끼리의 기본 리듬 1.5rem은 유지) */
+.prose p:has(> img) {
+  margin-top: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.prose p:has(> img) > img {
+  margin-top: 0.5rem;
+}
+.prose p:has(> img) > span {
+  /* 이미지 캡션 아래 여백 축소 */
+  margin-bottom: 0;
+}
+.prose p:has(+ p:has(> img)) {
+  /* 이미지 바로 앞 문단의 아래 여백 */
+  margin-bottom: 0.75rem;
+}
+.prose p:has(> img) + p {
+  /* 이미지 바로 뒤 문단의 위 여백 */
+  margin-top: 0.75rem;
+}
+
+/* 코드 블록(``` ```)과 본문 간격 축소 — 코드 figure와 바로 앞뒤 문단의 여백을 좁힘 */
+.prose figure[data-rehype-pretty-code-figure] {
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+}
+.prose figure[data-rehype-pretty-code-figure] > pre {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+.prose p:has(+ figure[data-rehype-pretty-code-figure]) {
+  /* 코드 블록 바로 앞 문단의 아래 여백 */
+  margin-bottom: 1rem;
+}
+.prose figure[data-rehype-pretty-code-figure] + p {
+  /* 코드 블록 바로 뒤 문단의 위 여백 */
+  margin-top: 1rem;
+}

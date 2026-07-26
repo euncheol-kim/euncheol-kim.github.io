@@ -62,12 +62,49 @@ const config = {
       typography: {
         DEFAULT: {
           css: {
+            // 본문 가독성: 행간·자간, 한글 줄바꿈(단어 단위)
+            lineHeight: '1.8',
+            letterSpacing: '-0.01em',
+            wordBreak: 'keep-all',
+
+            'h1, h2, h3, h4': {
+              letterSpacing: '-0.02em',
+              lineHeight: '1.35',
+            },
             'h2, h3, h4': {
               scrollMarginTop: '5rem',
             },
+            // 헤딩 위 여백은 넉넉히(섹션 구분), 아래는 좁게(본문과 결속)
+            h2: {
+              marginTop: '3rem',
+              marginBottom: '1rem',
+            },
+            h3: {
+              marginTop: '2.25rem',
+              marginBottom: '0.75rem',
+            },
+            h4: {
+              marginTop: '1.75rem',
+              marginBottom: '0.5rem',
+            },
             p: {
-              marginTop: '2rem',
-              marginBottom: '2rem',
+              marginTop: '1.5rem',
+              marginBottom: '1.5rem',
+              lineHeight: '1.8',
+              overflowWrap: 'break-word',
+            },
+            'ul, ol': {
+              marginTop: '1.25rem',
+              marginBottom: '1.25rem',
+            },
+            li: {
+              marginTop: '0.375rem',
+              marginBottom: '0.375rem',
+            },
+            // 코드는 자간·줄바꿈 원복 (등폭 폰트 보존)
+            'code, kbd, pre, samp': {
+              letterSpacing: 'normal',
+              wordBreak: 'normal',
             },
             '.callout-contents > p': {
               margin: 0,
