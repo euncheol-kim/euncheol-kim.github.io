@@ -1,0 +1,231 @@
+---
+title:  "코어 자바스크립트의 \"Javascript 객체:기본\" 정리"
+desc: 코어 자바스크립트의 "Javascript 객체:기본"을 읽고 정리한 내용입니다.
+date: 2026-07-24
+thumbnail: ./thumbnail.png
+isHot: false
+isVisible: true
+tags: Javascript, ES6
+---
+
+#### 참고 자료: https://ko.javascript.info/object-basics
+
+<br/>
+
+## 1. 객체
+객체는 다양한 데이터를 담을 수 있다. 객체는 중괄호`{...}`를 통해서 생성이 가능하다.
+중괄호 안에는 <b><u>키(`key`)와 값(`value`)  쌍으로 구성된 프로퍼티(`property`)를 여러 개 넣을 수 있다.</u></b>
+<b><u>키에는 문자형 그리고 값엔 모든 자료형이 허용된다.</u></b> 마지막으로 프로퍼티 키는 '이름', '식별자'라고도 불린다.
+
+### 1-1. 객체의 생성
+```javascript
+let user = new Object(); // '객체 생성자' 문법
+let user = {}; // '객체 리터럴' 문법 (🔥주로 사용하는 방식)
+```
+
+<br/>
+
+[예제 코드] 객체 생성/추가/삭제, 프로퍼티 값 읽기:
+```javascript
+// 객체 리터럴로 객체 생성
+let user = {
+  name: "John",
+  age: 30,
+  "likes birds": true // 두 단어 이상의 조합에서는 쌍 따옴표로 묶는다.
+};
+
+alert(user.name); // John
+alert(user["name"]); // John
+alert(user.age); // 30
+alert(user["age"]) // 30
+
+user.isAdmin = true // 프로퍼티 추가, user = {name: "John", age: 30, likes birds: true, isAdmin: true}
+delete user.age; // 프로퍼티 삭제, user = {name: "John", likes birds: true, isAdmin: true}
+
+user["age"] = 30; // 프로퍼티 추가, user = {name: "John", likes birds: true, isAdmin: true, age: 30}
+delete user["isAdmin"]; // 프로퍼티 삭제, user = {name: "John", likes birds: true, age: 30}
+```
+
+### 1-2. 상수 객체
+```javascript
+const user = {
+  name: "John"
+};
+
+user.name = "Pete"; // (*)
+
+alert(user.name); // Pete
+```
+상수 객체는 `const`로 만들어진 객체를 말한다. 객체가 상수로 만들어진다면 값의 수정이 되지 않을 것 같지만, 수정할 수 있다. <b><u>`const`는 user의 값을 고정하지만, 그 내용은 고정하지 않는다.</u></b>
+
+<br/>
+
+```text
+[ const 변수 ]  ---->  [ 객체의 메모리 주소 ]
+                             |
+                             +--> 프로퍼티1 (name): "Kim" (원시 값 직접 저장)
+                             +--> 프로퍼티2 (age) : 30    (원시 값 직접 저장)
+                             +--> 프로퍼티3 (bestFriend): [주소 B] ----> 또 다른 객체
+
+```
+정확히 설명하자면 <b><u>`const`가 값 자체가 아니라 <font color="steelblue">메모리 주소(참조)</font>를 고정하기 때문이다. 즉, <font color="steelblue">재할당은 금지하지만 내부 데이터 수정은 허용되어진다.</font></u></b> 재할당 금지라는 것은 변수가 가리키는 메모리 주소를 다른 곳으로 바꾸는 것을 말한다. 만약 객체 내부의 값까지 고정시키길 원한다면 <b>Object.freeze()</b> 사용법이나 <b>불변성 관리 방법</b>을 사용해야한다.
+
+## 2. 계산된 프로퍼티
+```javascript
+-----------------------------------------------------------------------
+let fruit = prompt("어떤 과일을 구매하시겠습니까?", "apple");
+
+let bag = {
+  [fruit]: 5, // 변수 fruit에서 프로퍼티 이름을 동적으로 받아 온다.
+};
+
+alert( bag.apple ); // fruit에 "apple"이 할당되었다면, 5가 출력된다.
+-----------------------------------------------------------------------
+let fruit = 'apple';
+let bag = {
+  [fruit + 'Computers']: 5 // bag.appleComputers = 5
+};
+-----------------------------------------------------------------------
+```
+객체를 만들 때, 객체 리터럴 안의 프로퍼티 키가 대괄호로 둘러싸여 있다면
+이를 계산된 프로퍼티(computed property)라고 부른다.
+
+## 3. 단축된 프로퍼티
+[예시] 단축되지 않은 객체의 내부 프로퍼티:
+```javascript
+function makeUser(name, age) {
+  return {
+    name: name,
+    age: age,
+  };
+}
+
+let user = makeUser("John", 30);
+alert(user.name); // John
+```
+위의 코드를 보면, 프로퍼티의 키와 값의 이름이 동일함을 알 수 있다.
+단축된 프로퍼티는 키와 값의 이름이 동일할 경우, 짧게 작성할 수 있는 문법을 제공한다.
+이는 프로퍼티 값 단축 구문(property value shorthand)이라고 한다.
+
+[예시] 프로퍼티 값 단축 구문:
+```javascript
+function makeUser(name, age) {
+  return {
+    name, // name: name 과 같음
+    age,  // age: age 와 같음
+    country: "Republic of Korea"
+  };
+}
+```
+
+## ⭐️ 4. `in` 연산자로 프로퍼티 존재 여부 확인하기
+[예시] 존재하지 않는 프로퍼티의 호출:
+```javascript
+let user = {};
+alert( user.noSuchProperty === undefined ); // true는 '프로퍼티가 존재하지 않음'을 의미합니다.
+```
+Javascript 객체의 중요한 특징중 하나는 다른 언어와는 달리, <b><u>존재하지 않는 프로퍼티에 접근하려 해도 에러가 발생하지 않고 `undeinfed`를 반환한다는 것이다.</u></b>
+
+위처럼 `undefined`와 비교하는 것 이외에도,
+`in`연산자는 프로퍼티 존재 여부를 확인할 수 있게 한다.
+
+[문법] in 연산자:
+```javascript
+"key" in object
+```
+<br/>
+[예시] in 연산자의 사용:
+```javascript
+let user = { name: "John", age: 30 };
+
+alert( "age" in user ); // user.age가 존재하므로 true가 출력됩니다.
+alert( "blabla" in user ); // user.blabla는 존재하지 않기 때문에 false가 출력됩니다.
+```
+
+## ⭐️ 5. `for...in`반복문
+[문법] for..in 반복문:
+```javascript
+for (key in object) {
+  // 각 프로퍼티 키(key)를 이용하여 본문(body)을 실행한다.
+}
+```
+
+[예시] for..in을 사용한 코드:
+```javascript
+let user = {
+  name: "John",
+  age: 30,
+  isAdmin: true
+};
+
+for (let key in user) {
+  // 키
+  alert( key );  // name, age, isAdmin
+  // 키에 해당하는 값
+  alert( user[key] ); // John, 30, true
+}
+```
+
+## 6. 객체의 정렬과 관련하여
+[예시] 객체 프로퍼티 키를 숫자값으로 지정:
+```javascript
+const user = {
+  0 = "Euncheol",
+  1 = "Republic of Korea",
+  2 = "Developer"
+};
+
+alert( user["0"] ); // Euncheol
+alert( user[0] ); // Euncheol
+```
+객체 프로퍼티의 키는 단순 문자열 뿐만 아니라 숫자형, 심볼형으로도 작성이 가능하며,
+문자형이나 심볼형에 속하지 않는 값은 문자열로 자동 형 변환 된다는 것을 기억한다.
+위의 코드는 키에 숫자를 넣고 자동 형 변환이 된다는 것을 보여주기 위한 코드이다.
+
+이제 객체 정렬 방식과 관련해서 설명해보고자 한다. 객체와 객체 프로퍼티를 다루다 보면 "프로퍼티엔 순서가 있을까?"라는 의문이 생기게 된다. 반복문은 프로퍼티를 추가한 순서대로 실행될지, 그리고 이 순서는 항상 동일할지에 대한 궁금증이다.
+
+결과적으로, Javascript는 객체를 특별한 방식으로 정렬 시킨다. <font color="steelblue"><b>정수 프로퍼티(integer property)</b></font>는 <b><u>자동으로 정렬</u></b>되고, <font color="steelblue"><b>그 외의 프로퍼티</b></font>는 <b><u>객체에 추가한 순서 그대로 정렬되어진다.</u></b>
+
+
+[예시] 객체 프로퍼티 키를 정수 프로퍼티로 지정하고, for..in문으로 출력:
+```javascript
+let codes = {
+  "49": "독일",
+  "41": "스위스",
+  "44": "영국",
+  // ..,
+  "1": "미국"
+};
+
+for (let code in codes) {
+  alert(code); // 1, 41, 44, 49
+}
+```
+
+[예시] 객체 프로퍼티 키를 문자열로 지정하고, for..in문으로 출력:
+```javascript
+----------------------------------------------
+let user = {
+  name: "John",
+  surname: "Smith"
+};
+user.age = 25; // 프로퍼티를 하나 추가
+
+// 정수 프로퍼티가 아닌 프로퍼티는 추가된 순서대로 나열
+for (let prop in user) {
+  alert( prop ); // name, surname, age
+}
+----------------------------------------------
+let codes = {
+  "+49": "독일",
+  "+41": "스위스",
+  "+44": "영국",
+  // ..,
+  "+1": "미국"
+};
+
+for (let code in codes) {
+  alert( +code ); // 49, 41, 44, 1
+}
+----------------------------------------------
+```
