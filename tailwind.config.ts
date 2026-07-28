@@ -111,6 +111,14 @@ const config = {
               marginTop: '1.25rem',
               marginBottom: '1.25rem',
             },
+            // 리드인 문단 바로 뒤에 오는 목록은 간격을 좁혀 결속
+            // (예: "아래와 같은 …" 문장 + 목록)
+            'p:has(+ ul), p:has(+ ol)': {
+              marginBottom: '0.5rem',
+            },
+            'p + ul, p + ol': {
+              marginTop: '0.5rem',
+            },
             li: {
               marginTop: '0.375rem',
               marginBottom: '0.375rem',
