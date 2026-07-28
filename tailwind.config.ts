@@ -76,8 +76,9 @@ const config = {
         DEFAULT: {
           css: {
             // 본문 가독성: 행간·자간, 한글 줄바꿈(단어 단위)
-            lineHeight: '1.8',
-            letterSpacing: '-0.01em',
+            // (lifeary 인상에 맞춰 행간은 촘촘히, 자간은 타이트하게)
+            lineHeight: '1.65',
+            letterSpacing: '-0.02em',
             wordBreak: 'keep-all',
 
             'h1, h2, h3, h4': {
@@ -103,7 +104,7 @@ const config = {
             p: {
               marginTop: '1.5rem',
               marginBottom: '1.5rem',
-              lineHeight: '1.8',
+              lineHeight: '1.65',
               overflowWrap: 'break-word',
             },
             'ul, ol': {
