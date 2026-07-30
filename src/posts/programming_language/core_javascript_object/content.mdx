@@ -5,7 +5,7 @@ date: 2026-07-27
 thumbnail: ./thumbnail.png
 isHot: false
 isVisible: true
-tags: Javascript, ES6, 객체 리터럴, 메서드 단축 구문, 심볼형
+tags: Javascript, ES6, 객체의 생성, 상수 객체, 계산된 프로퍼티, 단축된 프로퍼티, in, for..in, 객체의 정렬, 참조에 의한 비교, 객체 복사, 병합, Object.assign, 중첩 객체 복사, 가비지 컬렉션, 메서드 단축구문, this, 옵셔널 체이닝, 심볼형, 객체형을 원시형으로 변환하기, Symbol.toPrimitive, 객체 프로퍼티 동적할당,
 ---
 
 #### 참고 자료: https://ko.javascript.info/object-basics
@@ -170,9 +170,9 @@ for (let key in user) {
 [예시 코드] 객체 프로퍼티 키를 숫자값으로 지정:
 ```javascript
 const user = {
-  0 = "Euncheol",
-  1 = "Republic of Korea",
-  2 = "Developer"
+  0: "Euncheol",
+  1: "Republic of Korea",
+  2: "Developer"
 };
 
 alert( user["0"] ); // Euncheol
@@ -201,6 +201,10 @@ for (let code in codes) {
   alert(code); // 1, 41, 44, 49
 }
 ```
+키가 문자열이 맞긴하나, 코드에 작성하신 "49", "41", "1"과 같이 '정수로 변환할 수 있는 문자열'을 키로 사용할 때는 Javascript 엔진의 특별한 규칙이 적용된다. Javascript는 이런 형태의 키를 `'정수형 프로퍼티(Integer property)'`라고 부르며, <b><u>객체를 순회하거나 키를 뽑아낼 때 작성한 순서(삽입 순서)를 무시하고 자동으로 숫자 오름차순으로 정렬한다.</u></b>
+
+<b><u>작성한 코드처럼 노출해야하는 경우라면, 이러한 내부적 동작 때문에 예상치 못한 버그가 발생할 수 있다.</u></b>
+위의 문제를 해결하기 위해서는 프로퍼티 키에 `+`를 붙여주고, 출력시에 또 `+`를 붙여주어 숫자형으로 강제 형 변환하면 된다.
 
 [예시 코드] 객체 프로퍼티 키를 문자열로 지정하고, for..in문으로 출력:
 ```javascript
@@ -329,7 +333,7 @@ let user = { name: "John" };
 
 Object.assign(user, { name: "Pete" });
 
-alert(user.name); // user = { name: "Pete" }
+alert(user.name); // Pete, user = { name: "Pete" }
 ----------------------------------------------------------
 let user = {
   name: "John",
