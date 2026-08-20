@@ -1,11 +1,209 @@
 ---
-title:  "Fast API(python3.14) 학습 정리"
-desc: Fast API(python3.14)를 학습하며 정리한 내용입니다.
+title:  "Fast API(python.14) 학습 정리"
+desc: Fast API(python.14)를 학습하며 정리한 내용입니다.
 date: 2026-08-20
 thumbnail: ./thumbnail.png
 isHot: true
 isVisible: true
-tags: in progress, skill sheet, Python3.14, Fast API
+tags: in progress, skill sheet, python.14, Fast API
 ---
-# Fast API (version = python3.14)
 
+### 참고자료
+1. <b>(도서) 코딩 자율 학습 FastAPI 파이썬 백엔드 개발 입문</b>
+    - 발행: 2026년 05월 20일
+
+---
+
+
+# Fast API (version = python.14)
+
+<br/>
+
+## 1. 환경 구성
+### [1] 인터프리터 타입 설정
+파이참으로 프로젝트 생성시 인터프리터 타입 설정을 요구한다.
+인터프리터는 프로젝트의 코드를 실행하고 외부 패키지를 설치 및 관리할 <u>'독립적인 가상환경'을 어떤 방식으로 구성할 것인지를 결정하는 옵션</u>이다.
+
+#### [1-1] venv 인터프리터의 가상환경 생성
+```cmd
+python3.13 -m venv .hello_fastapi
+```
+프로젝트의 패키지 독립성을 확보하기 위해서 가상환경을 생성하는 것은 필수적이다.
+위의 명령은 <b>"파이썬3.13 내장 모듈(-m) venv를 사용해 `hello_fastapi` 가상환경을 만든다. 이때, hello_fastapi는 숨김폴더이다."</b> 라고 해석될 수 있다. <b>가상환경을 숨김 폴더로 생성하면 프로젝트를 관리하기 편하고 폴더 구조를 깔끔하게 유지할 수 있다.</b>
+
+⚠️ 설명을 위해서 `.hello_fastapi` 가상환경 네이밍을 주었지만 현업에서는 `.venv`의 이름으로 작성하는 것이 강력한 권장사항(업계 표준 컨벤션)이다. <sup> [가상환경 이름의 충돌의 여지가 있을까?](#b-4) </sup>
+이유는 ....
+
+#### [2-1] venv 가상환경 활성화
+```cmd
+source .hello_fastapi/bin/activate
+```
+![](./venv_active.png)
+가상환경을 활성화 하는 명령어다.정상적으로 가상환경이 활성화 됐다면 터미널에서 지정된 가상환경이 연결되었다는 표시로 이미지처럼 프롬프트의 앞에 소괄호 안에 가상환경명이 들어간 형태로 보여진다.
+이미지에서는 <b>.venv</b>의 가상환경이 활성화 된 상태이다.
+
+## 2. Controller (API end point)
+### [2-1] 요청 쿼리 파라미터 전송 받기
+🧑🏻‍💻[예제 코드]: Legacy, 요청 쿼리 파라미터 전송 받기
+```python
+@app.get("/items")
+def read_tems_handler(max_price: int):
+    return {"max_price": max_price}
+```
+함수에 매개변수를 명시해주면 된다. 
+
+🤔 단순히 매개 변수 정의로 쿼리 파라미터로 어떻게 추론할 수 있는 것일까?
+    - 파이썬의 타입 힌트(Type Hints)와 내부적인 우선순위 추론 규칙을 조합하여 함수의 구조를 분석하기 때문이다. FastAPI 생태계에서는 파이썬 3.9 이상에서 지원하는 Annotated를 사용하는 것이 완벽한 표준 트렌드로 자리 잡았기 때문에 정확한 이해를 위한 딥다이브는 하지 않아도 된다.
+
+🧑🏻‍💻[예제 코드]: Modern, 파이썬 3.9이상 지원
+```python
+@app.get("/items")
+def read_tems_handler(
+        max_price: Annotated[int | None, Query(description="아이템 최대 가격",le=49999)] = None,
+        low_price: Annotated[int | None, Query(description="아이템 최소 가격", ge=100000)] = None,
+        skip_item: Annotated[int, Query(description="건너뛸 아이템 개수")] = 0,
+        product_name: Annotated[str | None, Query(description="아이템 이름", min_length=3, max_length=20)] = ...,
+):
+    return {"max_price": max_price, "low_price": low_price, "skip_item": skip_item, "product_name": product_name}
+```
+`Annotated`를 통해 <b>의도를 명확하게 하는 것</b>이 현대 파이썬 개발의 트렌드이다.
+
+<b>1. 필수 인자값으로 지정</b>
+    - 우측의 피연산자 `...`를 작성해주어 쿼리 파라미터가 필수적인 요소임을 의도적으로 들어낸다. `= ...`을 붙이지 않는다면 이 또한 쿼리 파라미터가 필수적인 것을 나타내는데 이는 개발자의 실수인지, 의도인지 명확성이 떨어지게된다. 그러므로 필수 쿼리 파라미터인 경우는 `...`의 값을 우측 피연산자 값으로 넣어준다.
+
+<b>2. 선택 인자값으로 지정 </b>
+    - 우측의 피연산자 값을 지정 타입에 따라 None으로 표기하거나 기본 값으로 작성한다.
+    - URL로 요청받는 쿼리 파라미터가 없더라도 우측 피연산자 값을 따라간다.
+
+<b> 3. Query 함수의 옵션 </b>
+    - | 옵션 | 대응 type | 설명 |
+      |---|---|---|
+      | ge (Greater than or Equal to)| int | 입력값 `x`보다 크다.|
+      | le (Less than or Equal to) | int | 입력값 `x`보다 작다. | 
+      | min_length | str | 최소한의 길이는 `x`이다. | 
+      | max_length | str | 최대한의 길이는 `y`이다. |
+
+
+## 3. Paydantic (기본)
+Paydantic은 파이썬의 대표적 데이터 검증 라이브러리로, 입력된 데이터가 올바른 형식인지 확인하는데 사용된다.
+
+🧑🏻‍💻[예제 코드] Paydantic의 사용 예시
+```python
+from pydantic import BaseModel
+class Item(BaseModel):
+    name: str
+    price: int
+    in_stock: bool = True
+
+data = {"name": "Laptop", "price": 1200, "in_stock": False}
+new_item = Item(**data)
+print(new_item) # name='Laptop' price=1200 in_stock=False
+
+data = {"name": 123, "price": "abc"}
+new_item = Item(**data) # ValidationError
+
+"""
+오류의 출력:
+pydantic_core._pydantic_core.ValidationError: 2 validation errors for Item
+name
+  Input should be a valid string [type=string_type, input_value=123, input_type=int]
+    For further information visit https://errors.pydantic.dev/2.13/v/string_type
+price
+  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='abc', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/int_parsing
+"""
+```
+Paydatic으로 데이터를 검증하기 위해서는 BaseModel을 상속받아 Pydantic 모델을 정의해야한다.
+이렇게 정의한 모델을 활용하면 요청 데이터가 지정된 타입과 구조를 따르는지 자동으로 검사하고 잘못된 값이 들어오면 오류를 발생시킨다. <sup>[타입 힌트를 사용하면 Paydantic을 사용할 필요가 없지않나?](#b-8)</sup>
+
+
+---
+
+## 🌱 부록
+### <span id="b-1">1. 파이썬의 패키지(라이브러리) 관리</span>
+Fast API에 한정되는 개념이 아니다. 가장 표준화 되어 있는 `pip` 명령어를 통해 필요한 라이브러리를 설치한다. 이 라이브러리는 가상환경에 설치된다. 
+
+### <span id="b-2">2. 파이썬의 가상환경</span>
+Fast API에 한정되는 개념이 아니다. 
+프로젝트나 파일의 독립된 가상환경을 구성함으로써 의존성을 충돌없이 관리할 수 있다.
+
+### <span id="b-3">3. (Legacy) 버전 관리 저장소에서 처음 Fast API를 내려받은 이후의 작업</span>
+```cmd
+pip install -r requirements.txt
+```
+저장소에서 처음 Fast API 프로젝트를 내려 받고, 해당 명령어를 통해 프로젝트에 필요한 패키지를 내려받는다.
+
+ 👋 <b>[참고사항]: `requirements.txt`파일은 무엇인가?</b>
+ 프로젝트에서 필요한 패키지의 목록의 모음이라고 볼 수 있다.
+ ```cmd
+ pip freeze > requirements.txt
+ ```
+프로젝트를 진행하면서 필요한 패키지를 다운로드 받았다면 requirements.txt 파일의 갱신을 위해서 위의 명령어를 개발자가 항상 실행해줘야 한다. 이 명령은 <b>현재 가상환경에 설치된 모든 패키지와 버전 정보를 requirements.txt로 추출하여 덮어쓴다.</b>
+
+
+👋 <b>[참고사항]: `requirements.txt`파일은 레거시 취급이 되어가고 있다.</b>
+    - 과거에는 Virtualenv로 가상환경을 만들고 requirements.txt에 패키지 목록을 나열하여 관리하는 방식이 주류였다.  하지만 프로젝트 규모가 커질수록 패키지 간의 복잡한 의존성 꼬임 문제를 해결하기 어려워, 최근 현업에서는 이 방식을 점차 레거시로 취급하는 추세이다.
+
+    - 최근에는 Poetry를 이용해 관리하는 추세이고 이를 도입했을 때 `poetry install`명령을 통해 가상환경 생성 및 패키지 설치를 동시에 진행한다.
+
+### <span id="b-4"> 4. 가상환경 생성시 네이밍 충돌의 여지 </span>
+<b>전혀 일어나지 않는다.</b> 가상환경은 이름 그 자체로 시스템에 등록되는 것이 아니라, 
+<b>폴더가 위치한 절대 경로(Path)</b>를 기준으로 완전히 격리되어 작동하기 때문이다.
+
+### <span id="b-5">5. Swagger Docs</span>
+프로젝트가 성공적으로 빌드 되면 `http://localhost:8000/docs`로 API Rest Docs를 제공한다.
+이는 별 다른 설정없이 기본적으로 제공되는 기능이다.
+
+### <span id="b-6">6. None, False, 0의 차이</span>
+`None`은 null로 해석될 수 있다. 즉, 데이터 자체가 존재하지 않는 상태를 의미한다.
+`0`과 `False`의 경우 "없다"로 해석되는 것이 아니라, 데이터는 분명 존재하지만 `0`과 `False`의 값을 가진다. 라고 판단하면 된다.
+
+### 🔥 <span id="b-7">7. 파이썬의 타입 힌트</span>
+#### [7-1] 기본 내장 타입
+|type|의미|예시|
+|---|---|---|
+|int|정수|1, 100|
+|str|문자열|"FastAPI"|
+|float|소수점이 있는 실수| 3.14|
+|boolean| 참/거짓 | True, False| 
+
+#### [7-2] 컬렉션 타입
+|type|의미|특이사항|
+|---|---|---|
+|list[타입]| 지정 타입의 리스트 ||
+|dict[키타입, 값타입]|지정 타입의 딕셔너리||
+|tuple[타입1, 타입2]|지정 타입의 튜플|튜플의 각 리스트의 첫 번째, 두 번째 요소가 각각 타입1, 타입2 임을 나타낸다.|
+|set[타입]| 중복이 없는 타입의 집합 || 
+
+#### [7-3] 복합 및 특수 타입
+|핵심| 주요 키워드 | 설명 |예시 |
+|---|---|---|---|
+|다중 타입| `\|` | - | int \| str |
+|선택적 타입| `\| None` | 값이 없을 수도 있는 상태를 명시 | - |
+| 엄격한 타입 제한 | `Literal` | 특정 값 자체만 들어오도록 강력히 제한 | Literal["asc", "desc"]|
+
+### 🔥 <span id="b-8">8. 타입 힌트를 사용하면 Paydantic을 사용할 필요가 없지않나?</span>
+🔥 <u>파이썬의 타입 힌트는 프로그램이 실제로 실행될 때(Runtime) 어떠한 강제성도 갖지 못하는 '단순한 메모(주석)'에 불과하기 때문에 Pydantic과 같은 검증 라이브러리가 반드시 필요하다.</u>
+
+#### [8-1] 파이썬의 타입 힌트의 치명적 한계
+```python
+# 순수 파이썬의 한계: 타입이 달라도 실행 시 아무 에러 없이 통과한다.
+def add_numbers(a: int, b: int):
+    return a + b
+
+# 타입 힌트는 int지만, 문자열을 넣어도 서버가 죽지 않고 엉뚱하게 실행된다.
+add_numbers("hello", " world") # 결과: "hello world"
+```
+파이썬은 태생적으로 실행 중에 데이터의 타입이 유연하게 변할 수 있는 동적 타이핑(Dynamic Typing) 언어이다. 타입 힌트는 파이참(PyCharm) 같은 도구에서 개발자에게 경고 밑줄을 그어주거나 코드를 읽기 쉽게 만드는 용도일 뿐, 실제 잘못된 데이터의 유입을 물리적으로 막아주지 못한다.
+
+#### [8-2] Pydantic이 현업에서 필수적인 3가지 이유
+<b>1. 엄격한 런타임(Runtime) 방어</b>
+    - Pydantic은 실행 중에 타입 힌트를 분석하여, 명시된 타입과 다른 데이터가 들어오면 서버 로직이 실행되기 전에 즉시 에러(422)를 발생시켜 시스템을 보호한다.
+    
+<b> 2. 스마트한 자동 형변환 (Type Coercion) </b>
+    -  <b>HTTP 웹 통신을 통해 들어오는 데이터는 기본적으로 문자열 텍스트("10")이다.</b> 
+    Pydantic은 타입 힌트가 int로 되어 있으면 이를 알아서 숫자 10으로 안전하게 변환한다.
+
+<b>3. 복잡한 비즈니스 조건 검증</b>
+    - 단순히 str인지 확인하는 것을 넘어, "이메일 형식인지", "비밀번호가 특정 특수문자를 포함하는지" 등 
+    단일 타입 힌트만으로는 절대 불가능한 세밀한 검증을 쉽게 구현할 수 있다.
