@@ -136,6 +136,8 @@ def create_item(item: Item):
 이번 예제 코드를 만들면서 객체를 만들었기 때문에 응답값 반환의 타입을 명시해 보았다.
 만약, 반환값이 없다면 단순히 `reponse_model`를 지워주면 된다.
 
+Item 리스트를 반환해줘야 하는 경우라면 `reponse_model=list[Item]`으로 작성해주면 된다.
+
 ## 3. Paydantic
 ### [3-1] Paydantic의 기본
 Paydantic은 파이썬의 대표적 데이터 검증 라이브러리로, 입력된 데이터가 올바른 형식인지 확인하는데 사용된다.
