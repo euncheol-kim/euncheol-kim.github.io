@@ -1,0 +1,23 @@
+---
+title:  "Fast API(python3.14) Skill sheet"
+desc: Fast API(python3.14) skill sheet 정리입니다.
+date: 2026-08-20
+thumbnail: ./thumbnail.png
+isHot: true
+isVisible: true
+tags: in progress, skill sheet, Python3.14, Fast API
+---
+# Python, skill sheet 정리
+
+#### 🌱 [배경지식] 순수 파이썬의 특징 
+1. 파이썬은 <u>메서드 오버로딩을 공식적으로 지원하지 않는다</u>.
+2. 파이썬 클래스는 <u>2개 이상의 생성자 생성을 할 수 없다.</u> (메서드 오버로딩의 영향)
+
+#### 🌱 모던한 파이썬 코드의 특징
+1. <b>[Lagacy 취급]</b>: 객체 생성을 위한 `@classmethod`사용은 코드를 개발자가 직접 작성해줘야한다.
+    -  모던한 파이썬 백엔드/데이터 엔지니어링 생태계에서는 <b>객체를 다양한 형태(JSON, 딕셔너리, 외부API 응답 등)로 변환하고 생성하는 "생성자 파싱 로직"을 직접 구현하는 것을 레거시로 취급하는 경향이 있다.</b>
+    -  Pydantic 라이브러리를 사용하면 다중 생성자나 파이썬의 복잡한 팩토리 메소드를 만들 필요 없이, 외부의 복잡한 데이터를 즉시 안전한 파이썬 객체로 만들어준다.
+
+
+## 1. 모델 설계 지침 가이드
+🧑🏻‍💻<b>[예시 코드]: 모던 파이썬 모델 예시 코드</b>

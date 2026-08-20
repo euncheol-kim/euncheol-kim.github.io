@@ -1,0 +1,205 @@
+---
+title:  "Vanilla Javascript Skill sheet"
+desc: 바닐라 자바스크립트 스킬시트입니다.
+date: 2026-08-19
+thumbnail: ./thumbnail.png
+isHot: false
+isVisible: true
+tags: in progress, Javascript, ES6,
+---
+
+## 1. <a href="https://developer.mozilla.org/ko/docs/Web/API/EventTarget" target="https://developer.mozilla.org/ko/docs/Web/API/EventTarget">EventTarget</a>.addEventListener() (<a href="https://developer.mozilla.org/ko/docs/Web/API/EventTarget/addEventListener" target="_blank"> MDN </a>)
+### [1-1] Syntax
+```javascript
+addEventListener(type, listener);
+addEventListener(type, listener, options);
+addEventListener(type, listener, useCapture);
+```
+|파라메터|설명|
+|---|---|
+|<b>type</b>|수신할 이벤트 유형을 나타내는 대소문자 구분 문자열|
+|<b>listener</b>|지정한 이벤트를 수신할 객체이다. <br/> `handleEvent()` 메서드를 포함하는 객체 또는 Javascript함수여야 한다.|
+|<b>options</b>|이벤트 수신기의 특징을 지정할 수 있는 객체|
+
+<br/>
+
+#### [1-1-1] 주요 타입
+|주요 type|설명|
+|---|---|
+|<a href="https://developer.mozilla.org/ko/docs/Web/API/Document/DOMContentLoaded_event" target="_blank">DOMContentLoaded</a> | 이벤트는 HTML 문서가 완전히 파싱되고, 모든 지연된 스크립트가 다운로드되어 실행된 후에 발생한다. | 
+
+## 2. Document.createDocumentFragment(<a href="https://developer.mozilla.org/ko/docs/Web/API/Document/createDocumentFragment" target="_blank"> MDN </a>)
+### [2-1] Syntax
+```javascript
+const docFragment = document.createDocumentFragment();
+```
+화면에 보이지 않는 가상의 임시 부모 노드(<a href="https://developer.mozilla.org/ko/docs/Web/API/DocumentFragment" target="_blank">DocumentFragment</a>)를 만드는 메서드
+
+[주요 특징]
+- <b>가상의 DOM 보관함</b> 
+: 메모리 안에서만 작동하므로 요소를 추가하거나 수정해도 화면을 다시 그리는 렌더링이 일어나지 않는다.
+- <b>성능 향상</b> 
+: 반복문 안에서 요소를 하나씩 화면에 추가하면 잦은 피플로우로 느려지지만, 프래그먼트에 다 담은 뒤 마지막에 한 번만 실제 DOM에 추가하면 속도가 훨씬 빨라진다.
+- <b>깔끔한 코드 관리</b> 
+: 실제 문서 구조에 영향을 주지 않고 안전하게 요소를 조립할 수 있다.
+
+[일반적인 용도]
+DocumentFragment의 일반적인 용도는 그 안에 DOM 하위 트리를 조립한 다음, Node 인터페이스의 <b>appendChild()</b>나 <b>insertBefore()</b>와 같은 메서드로 DOM에 하위 트리를 삽입한다. 이 방법을 사용하면 DocumentFragment의 노드들이 모두 DOM으로 이동하고 빈 DocumentFragment만 남게 된다. 이때 모든 노드가 한 번에 문서에 삽입되기 때문에 리플로우도 한 번만 발생한다. 반면 노드를 각각 하나씩 삽입했다면, 최악의 경우 매 삽입마다 리플로우가 발생했을 것이다.
+
+## 3. Document.createElement()(<a href="https://developer.mozilla.org/ko/docs/Web/API/Document/createElement" targe="_blank"> MDN </a>)
+### [3-1] Syntax
+```javascript
+let element = document.createElement(tagName[, options]);
+```
+HTML 문서에서, <b>Document.createElement()</b> 메서드는 지정한 <b>tagName</b>의 <b>HTML 요소를 만들어 반환한다.</b>
+<b>tagName을 인식할 수 없으면 HTMLUnknownElement를 대신 반환한다.</b>
+
+
+
+
+## 🌱 부록
+### 1.  DOMContentLoaded + createElement + createDocumentFragment 예시코드
+🧑🏻‍💻[예시 코드]: 4 x 4 배열에 숫자를 채우는 웹 페이지
+- 특이사항
+: 최적화 된 코드는 아니지만 createElement와 createDocumentFragment를 어떻게 사용하는지 알 수 있다.
+```javascript
+<div class="matrix-wrapper">
+  <!-- input & button -->
+  <div style="display: flex; align-items: center; gap: 5px;">
+    <input id="matrixInput" type="text" style="width: 50px; height: 19px;">
+    <button id= "matrixButton" type="button">선택</button>
+  </div>
+  
+  <!-- Matrix -->
+  <div id="matrixDiv"></div>
+</div>
+
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    // element object
+    const elements = {
+	  matrixInput: document.querySelector("#matrixInput"),
+	  matrixButton: document.querySelector("#matrixButton"),
+      matrixDiv: document.querySelector("#matrixDiv"),
+    }
+
+    // Callback (or Method)
+    const createMatrix = (numInput) => {
+      if (!numInput || numInput <= 0) {
+        elements.matrixDiv.innerHTML = '';
+        return;
+      }
+
+      const fragment = document.createDocumentFragment();
+      const table = document.createElement('table');
+      table.classList.add('table', 'table-bordered'); // 가운데 정렬 추가
+      table.style.width = "150px"; // 괄호 너비만 깔끔하게 주입
+
+      const totalCells = Math.ceil(numInput / 4) * 4; 
+      
+      let bodyTr = null;
+
+      for (let i = 1; i <= totalCells; i++) {
+        
+        if ((i - 1) % 4 === 0) {
+          bodyTr = document.createElement('tr');
+          table.appendChild(bodyTr);
+        }
+
+        const bodyTd = document.createElement('td');
+
+        bodyTd.style.border = "1.2px solid #dee2e6";
+
+        if (i <= numInput) {
+          bodyTd.textContent = i;
+        } else {
+          bodyTd.textContent = 'x';
+        }
+
+        bodyTr.appendChild(bodyTd);
+      }
+
+      fragment.appendChild(table);
+      elements.matrixDiv.innerHTML = '';
+      elements.matrixDiv.appendChild(fragment);
+    };
+
+    // Event
+    elements.matrixButton.addEventListener('click', () => {
+        const numInput = parseInt(elements.matrixInput.value)
+        createMatrix(numInput);
+    })
+  });
+</script>
+```
+
+<br/>
+
+🧑🏻‍💻[예시 코드]: 구구단 출력
+```javascript
+<div class="gugu-wrapper">
+  <select id="danSelect">
+    <option value="">선택</option>
+  </select>
+  
+  <button id="calcBtn" type="button">계산</button>
+</div>
+
+<div id="resultArea" class="result-area"></div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    // element object
+    const elements = {
+      danSelect: document.querySelector("#danSelect"),
+      calcBtn: document.querySelector("#calcBtn"), 
+      resultArea: document.querySelector("#resultArea") 
+    };
+
+    //  Init dan options
+    const initDanOptions = () => {
+      const fragment = document.createDocumentFragment();
+      for (let i = 1; i <= 9; i++) {
+        const option = document.createElement('option');
+        option.value = i;
+        option.textContent = i + '단'; 
+        fragment.appendChild(option);
+      }
+      
+      elements.danSelect.appendChild(fragment);
+    };
+
+    // Callback
+    const renderGugudan = (dan) => {
+      const list = document.createElement('div');
+    
+      const fragment = document.createDocumentFragment();
+
+      // 구구단 계산과 자식 요소의 추가
+      for (let i = 1; i <= 9; i++) {
+        const listItem = document.createElement('div');
+        listItem.textContent = dan + 'x' + i + '=' + (dan * i); 
+        fragment.appendChild(listItem);
+      }
+      list.appendChild(fragment);
+    
+      elements.resultArea.replaceChildren(list);
+    };
+
+    // Event
+    elements.calcBtn.addEventListener('click', () => {
+      const selectedDan = parseInt(elements.danSelect.value, 10);
+
+      // 결과 태그에 빈공간 처리
+      if (Number.isNaN(selectedDan)) {
+        elements.resultArea.replaceChildren(); 
+        return;
+      }
+      
+      renderGugudan(selectedDan);
+    });
+    
+    initDanOptions();
+  });
+</script>
+```

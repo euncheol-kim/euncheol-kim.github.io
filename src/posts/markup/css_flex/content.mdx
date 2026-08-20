@@ -1,0 +1,71 @@
+---
+title:  "CSS Flex에 대한 정리"
+desc: CSS Flex에 대한 정리 내용입니다.
+date: 2026-08-19
+thumbnail: ./thumbnail.png
+isHot: false
+isVisible: true
+tags: in progress, css, flex
+---
+
+#### 참고자료
+- https://studiomeal.com/archives/197/
+
+<br/>
+
+# CSS Flex
+```html
+<div class="container">
+	<div class="item">helloflex</div>
+	<div class="item">abc</div>
+	<div class="item">helloflex</div>
+</div>
+```
+기본적인 구조가 다음과 같다고 생각해보자.
+
+<b>div.container를 Flex Container(플렉스 컨테이너)</b>라고 부르고
+<b>자식 요소인 div.item들을 Flex item(플렉스 아이템)</b>이라고 부른다.
+
+🔥 <u>"컨테이너가 Flex의 영향을 받는 전체 공간이고 설정된 속성에 따라 각각의 아이템들이 어떤 형태로 배치되는 것"이라고 이해하면 된다.</u>
+
+
+🧑🏻‍💻[예제 코드]: Flex Container의 CSS 적용
+```css
+.container {
+	display: flex;
+}
+```
+CSS의 <b>display</b>는 <u>"요소를 어떻게 보여줄지 레이아웃을 결정"</u>하는 속성 이다.
+🔥 `flex`는 레이아웃에 영향을 주는 값이다. 별 다른 조치가 없다면 기본적으로 다음과 같은 특징을 가진다.
+- Flex item들이 기본적으로 가로 방향으로 배치가 되어진다.
+- 각 아이템의 width는 자신이 가진 내용물 만큼 차지하게 된다.
+- 각 아이템의 height는 Flex Container의 높이 만큼 차지하게 된다.
+
+🔥 `flex`는 Flext Item들을 가로로 배치하기 위한 목적을 가지는 것은 아니다.
+`flex`를 설정했을 때 `flex-direction`키 값이 기본적으로 `row`값을 가지기 때문이다.
+
+즉 `flex`의 사용은 <u>집합 단위의 서로 다른 아이템 요소를 일관된 레이아웃의 방향을 갖게 한다.</u>라고 이해하면 된다.
+
+
+----
+
+## 🌱 부록
+### 1. 박스 모델(Box Model)
+HTML의 모든 요소는 네모난 상자(Box)에 들어간다고 볼 수 있다.
+<b>이 상자의 부피와 배치를 결정하는 4가지 구역의 집합</b>을 박스 모델이라고 한다.
+
+박스 모델의 속성으로는 `width`, `height`, `margin`, `padding`에 `border`를 포함한다고 말할 수 있다.
+이 속성들로 하여금 하나의 박스를 완성할 수 있다.
+
+### 2. 블록 요소와 인라인 요소의 특징
+|요소 구분|종류|설명|박스 모델 영향|
+|---|---|---|---|
+|<b>블록 요소</b>| div, p, h 등 | 1. 항상 새로운 줄에서 시작<br/> 2. 부모 요소의 가로 너비를 100% 차지 <br/> 3. 세로로 쌓이는 구조 | - width, height, margin, padding <br/>모두 자유롭게 갖는다.|
+|<b>인라인 요소</b>| span, a, strong 등 | 1. 콘텐츠 공간만큼 공간을 차지<br/> 2. 가로로 배치|- width, height 값을 주어도 무시된다. <br/> - 상하 margin과 padding이 주변 요소의 배치에 영향을 주지 못한다.(레이아웃을 밀어내지 않는다.)|
+
+### 3. 레이아웃을 밀어낸다는 의미
+'레이아웃을 밀어낸다(Pushing the layout)'는 의미는 화면 상에서 <u>요소가 자신만의 물리적인 부피(공간)를 온전히 차지하여, 주변에 있는 다른 요소들이 그 공간만큼 옆이나 아래로 비켜나게 만든다.</u> 라는 의미를 가진다.
+
+레이아웃을 밀어내는 개념은 매우 중요하다.
+인라인 요소의 주요 특징은 상하 `margin`과 `padding`이 주변 요소의 배치를 영향을 주지 못한다.
+
