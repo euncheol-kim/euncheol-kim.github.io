@@ -2,7 +2,7 @@
 title:  "코어 자바스크립트의 \"Javascript 자료구조와 자료형 \"의 \"배열과 메소드\" 정리"
 desc: 코어 자바스크립트의 "Javascript 자료구조와 자료형"의 "배열과 메소드" 챕터를 읽고 정리한 내용입니다.
 date: 2026-07-30
-thumbnail: ./thumbnail.png
+thumbnail: ./thumbnail.webp
 isHot: false
 isVisible: true
 tags: Javascript, ES6, delete, splice, slice, concat, forEach, indexOf, lastIndexOf, includes, map, sort, reverse, split, join, reduce, reduceRigth, Array.isArray, thisArg
@@ -115,7 +115,7 @@ alert(arr); // t,e,s,t
 `arr.slice`는 문자열 메서드인 `str.slice`와 유사하게 동작하는데 `arr.slice`는 서브 문자열(substring) 대신 서브 배열(subarray)을 반환한다.
 
 쉽게 생각하면 아래와 같다.
-![](./slice_vs_splic.png)
+![](./slice_vs_splic.webp)
 
 ### 1-4. `concat`
 🌱[문법]
@@ -337,9 +337,9 @@ alert(arr);  // 1, 2, 15
 대개 최적화된 `퀵 소트`(quicksort)를 사용하는데, `arr.sort(fn)`는 주어진 함수를 사용해 정렬 기준을 만들고 이 기준에 따라 요소들을 재배열하므로 개발자는 내부 정렬 동작 원리를 알 필요가 없다. 우리가 해야 할 일은 정렬 함수 `fn`을 만들고 이를 인수로 넘겨주는 것뿐이다.
 
 🔥 중요한 참고사항
-![](./sort_simple.png)
-![](./localeCompare.png)
-![](./sort_a_minus_b.png)
+![](./sort_simple.webp)
+![](./localeCompare.webp)
+![](./sort_a_minus_b.webp)
 
 #### 1-7-3. `reverse`
 🧑🏻‍💻[예제 코드] 배열의 역순 정렬
@@ -383,7 +383,7 @@ alert(arr); // Bilbo, Gandalf
 실무에서 자주 사용하는 코드는 아니다.
 
 🔥 중요한 참고사항
-![](./str_split.png)
+![](./str_split.webp)
 
 ### 1-9. `arr.join(glue)`
 `arr.join(glue)`은 split과 반대 역할을 하는 메서드이다. 
@@ -441,7 +441,7 @@ alert(result); // 15
 
 
 계산 흐름은 아래와 같다.
-![](./array_reduce.png)
+![](./array_reduce.webp)
 
 <br/>
 

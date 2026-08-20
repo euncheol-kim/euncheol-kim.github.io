@@ -2,7 +2,7 @@
 title: Webpack 빌드 파일은 어떻게 캐시되는가 (+ Nginx)
 date: 2023-11-08
 desc: 배포할 때마다 전부 새로 빌드해줄 것 같아?
-thumbnail: ./thumbnail.jpg
+thumbnail: ./thumbnail.webp
 isVisible: false
 ---
 
@@ -40,13 +40,13 @@ isVisible: false
 ## Webpack : Hash Filename
 webpack에서는 build 결과 생성된 chunk 이름에 해시값을 부여한다.
 
-![webpack.config.js 파일 내 hash 로직](/posts/deep_dive/webpack_build_cache/1.jpeg)
+![webpack.config.js 파일 내 hash 로직](/posts/deep_dive/webpack_build_cache/1.webp)
  
 정말 변경이 있는 파일만 해시값이 바뀔까?
 파일 확장자에 따라서 그 전략이 다를 것 같은데,
 실제 파일 변경 후 빌드를 해서 전후 차이를 살펴보도록 하자.
 
-![파일 변경 전후 빌드파일 해시값 비교표. 초록 음영은 css 파일](/posts/deep_dive/webpack_build_cache/2.png)
+![파일 변경 전후 빌드파일 해시값 비교표. 초록 음영은 css 파일](/posts/deep_dive/webpack_build_cache/2.webp)
 
 파일 수정 전후 빌드 디렉토리 내 파일명을 비교하여 표로 정리해 보았다.
 
@@ -75,9 +75,9 @@ location ^~ /static/ {
 ## 캐시 응답 여부 확인
 네트워크 탭에서 확인 결과, 변경된 파일을 실제로 새롭게 제공하는 것을 확인할 수 있었다.
 
-![변경되지 않은 파일 (위 도표의 main.js)](/posts/deep_dive/webpack_build_cache/3.png)
+![변경되지 않은 파일 (위 도표의 main.js)](/posts/deep_dive/webpack_build_cache/3.webp)
 
-![변경된 파일 (위 도표의 59번 js 파일)](/posts/deep_dive/webpack_build_cache/4.png)
+![변경된 파일 (위 도표의 59번 js 파일)](/posts/deep_dive/webpack_build_cache/4.webp)
 
 ## 정리
 - 빌드 파일에 해시값이 부여되고, 파일 내용에 수정이 있는 경우에만 해시값이 갱신된다.

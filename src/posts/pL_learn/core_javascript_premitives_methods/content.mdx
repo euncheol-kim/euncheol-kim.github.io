@@ -2,7 +2,7 @@
 title:  "코어 자바스크립트의 \"Javascript 자료구조와 자료형 \"의 \"숫자형\" 정리"
 desc: 코어 자바스크립트의 "Javascript 자료구조와 자료형"의 "숫자형" 챕터를 읽고 정리한 내용입니다.
 date: 2026-07-28
-thumbnail: ./thumbnail.png
+thumbnail: ./thumbnail.webp
 isHot: false
 isVisible: true
 tags: Javascript, ES6, toFixed, toString, estimate, 부동소수점 IEEE-754 (정밀도 손실), isNaN, isFinite, Object.is, parseInt, parseFloat
@@ -142,7 +142,7 @@ alert( 123456..toString(36) ); // 2n9c
 
 ### ⭐️ 2-4. 어림수 구하기
 어림수를 구하는 것(rounding)은 숫자를 다룰 때 가장 많이 사용되는 연산이다.
-![](./estimate.png)
+![](./estimate.webp)
 위에서 소개한 내장 함수들만으로도 소수부에 관련된 연산 대부분을 처리할 수 있다.
 그런데 소수점 `n-th`번째 수를 기준으로 어림수를 구해야 하는 상황이라면 어떻게 해야할까?
 
@@ -249,7 +249,7 @@ alert( isFinite(Infinity) ); // false, Infinity이기 때문이다.
 🔥 <font color="salmon"><b>주의할 것은</b></font> <b>빈 문자열</b>이나, <b>공백만 있는 문자열</b>은 <b><u>isFinite를 포함한 모든 숫자 관련 내장 함수에서 0으로 취급된다</u></b>
 
 [참고 사항] Object.is
-![](./object_is.png)
+![](./object_is.webp)
 
 ### ⭐️ 2-7. parseInt와 parseFloat
 ```javascript
@@ -273,7 +273,7 @@ alert( parseInt('a123') ); // NaN, a는 숫자가 아니므로 숫자를 읽는 
 🔥 parseInt는 정수, 🔥 parseFloat는 부동 소수점 숫자를 반환한다.
 `parseInt`와 `parseFloat`가 `NaN`을 반환할 때도 있다. 이는 읽을 수 있는 숫자가 없을 때 그렇다.
 
-![](./parseInt_str_radix.png)
+![](./parseInt_str_radix.webp)
 
 ### 2-8. 기타 수학 연산자
 ```javascript

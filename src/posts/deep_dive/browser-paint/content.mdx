@@ -2,7 +2,7 @@
 title: 브라우저가 화면을 그리는 과정 (Reflow, Repaint)
 date: 2024-11-17
 desc: 브라우저의 렌더링 엔진이 화면을 그리는 과정을 알아보자.
-thumbnail: ./thumbnail.png
+thumbnail: ./thumbnail.webp
 isVisible: false
 ---
 
@@ -10,7 +10,7 @@ isVisible: false
 
 브라우저는 아래와 같은 구조로 이루어져 있습니다.
 
-![출처: https://d2.naver.com/helloworld/59361](./1.png)
+![출처: https://d2.naver.com/helloworld/59361](./1.webp)
 
 
 1. 사용자 인터페이스
@@ -39,7 +39,7 @@ firefox는 mozilla에서 만든 Gecko 엔진을 사용하고, 사파리와 크�
 
 아래 흐름과 같이 간단하게 정리할 수 있습니다.
 
-![출처: javascript deep dive 도서](./2.png)
+![출처: javascript deep dive 도서](./2.webp)
 
 1. HTML을 기반으로 DOM tree 생성
 2. CSS를 기반으로 CSSOM tree 생성
@@ -93,12 +93,12 @@ firefox는 mozilla에서 만든 Gecko 엔진을 사용하고, 사파리와 크�
 
 위 과정을 다음과 같이 그림으로 정리할 수 있습니다.
 
-![출처: javascript deep dive 도서](./3.jpg)
+![출처: javascript deep dive 도서](./3.webp)
 
 
 <Callout type="info">Token화 알고리즘</Callout>
 
-![출처: https://d2.naver.com/helloworld/59361](./4.png)
+![출처: https://d2.naver.com/helloworld/59361](./4.webp)
 
 
 다음과 같은 html을 예시로 설명하겠습니다.
@@ -144,7 +144,7 @@ ul {
 스타일을 `head` 태그에 선언하든, 외부 stylesheet를 link로 불러오든 과정은 동일합니다. 
 DOM과 동일한 과정으로 파싱, 생성된 CSSOM은 다음과 같습니다.
 
-![출처: javascript deep dive 도서](./5.jpg)
+![출처: javascript deep dive 도서](./5.webp)
 
 
 <Callout type="info">
@@ -163,7 +163,7 @@ CSSOM은 왜 트리구조일까요?
 
 앞서 만든 DOM, CSSOM을 결합하여, Render tree를 만듭니다.
 
-![출처: javascript deep dive 도서](./6.png)
+![출처: javascript deep dive 도서](./6.webp)
 
 1. DOM tree의 root node부터 시작하여, visible한 node를 각각 traverse(순회)합니다.
     - script, meta 와 같은 일부 노드는 visible하지 않습니다. 생략됩니다.
