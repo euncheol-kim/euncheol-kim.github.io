@@ -7,7 +7,8 @@ export const Curation = ({postList}: {postList: Post[]}) => {
 
   const firstPost = postList[0];
   const hotPostAllList = postList.filter((post) => post.isHot);
-  const hotPostShowList = firstPost.isHot? hotPostAllList.slice(1,  5) : hotPostAllList.slice(0,  4);
+  // 최신글이 추천(isHot)이면 왼쪽 '최신 게시물'과 오른쪽 '추천 게시물'에 모두 노출한다.
+  const hotPostShowList = hotPostAllList.slice(0, 4);
 
   return (
     <div className='mx-auto w-full max-w-[1200px] px-4 flex gap-6 lg:gap-8 mt-6 sm:mt-10 flex-col sm:flex-row items-stretch'>
