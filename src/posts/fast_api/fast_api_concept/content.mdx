@@ -46,8 +46,21 @@ source .hello_fastapi/bin/activate
 ### [2-1] 요청 쿼리 파라미터 전송 받기
 🧑🏻‍💻[예제 코드]: Legacy, 요청 쿼리 파라미터 전송 받기
 ```python
-@app.get("/items")
+@app.get("/items1")
 def read_tems_handler(max_price: int):
+    """
+    쿼리 파라미터가 반드시 필요한 API
+    """
+    return {"max_price": max_price}
+
+
+@app.get("/items2")
+def read_tems_handler(max_price: int | None = None):
+    """
+    쿼리 파라미터가 선택적인 경우.
+    값이 할당 되지 않으면 None값이 들어간다.
+    None은 데이터가 존재하지 않음을 명확히하는 표현. 
+    """
     return {"max_price": max_price}
 ```
 함수에 매개변수를 명시해주면 된다. 
@@ -84,7 +97,8 @@ def read_tems_handler(
       | max_length | str | 최대한의 길이는 `y`이다. |
 
 
-## 3. Paydantic (기본)
+## 3. Paydantic
+### [3-1] Paydantic의 기본
 Paydantic은 파이썬의 대표적 데이터 검증 라이브러리로, 입력된 데이터가 올바른 형식인지 확인하는데 사용된다.
 
 🧑🏻‍💻[예제 코드] Paydantic의 사용 예시
