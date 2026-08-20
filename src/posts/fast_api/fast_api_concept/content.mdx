@@ -43,10 +43,13 @@ source .hello_fastapi/bin/activate
 이미지에서는 <b>.venv</b>의 가상환경이 활성화 된 상태이다.
 
 ## 2. Controller (API end point)
-### [2-1] 요청 쿼리 파라미터 전송 받기
+### [2-1] GET: 요청 쿼리 파라미터 전송 받기
 🧑🏻‍💻[예제 코드]: Legacy, 요청 쿼리 파라미터 전송 받기
 ```python
-@app.get("/items1")
+@app.get(
+    "/items1",
+    status_code=status.HTTP_200_OK
+)
 def read_tems_handler(max_price: int):
     """
     쿼리 파라미터가 반드시 필요한 API
@@ -54,7 +57,10 @@ def read_tems_handler(max_price: int):
     return {"max_price": max_price}
 
 
-@app.get("/items2")
+@app.get(
+    "/items2",
+    status_code=status.HTTP_200_OK
+)
 def read_tems_handler(max_price: int | None = None):
     """
     쿼리 파라미터가 선택적인 경우.
@@ -70,7 +76,10 @@ def read_tems_handler(max_price: int | None = None):
 
 🧑🏻‍💻[예제 코드]: Modern, 파이썬 3.9이상 지원
 ```python
-@app.get("/items")
+@app.get(
+    "/items",
+    status_code=status.HTTP_200_OK
+)
 def read_tems_handler(
         max_price: Annotated[int | None, Query(description="아이템 최대 가격",le=49999)] = None,
         low_price: Annotated[int | None, Query(description="아이템 최소 가격", ge=100000)] = None,
@@ -96,6 +105,36 @@ def read_tems_handler(
       | min_length | str | 최소한의 길이는 `x`이다. | 
       | max_length | str | 최대한의 길이는 `y`이다. |
 
+### [2-2] POST: 요청 데이터를 포함한 데이터 생성
+```python
+class Item(BaseModel):
+    name: str
+    price: float
+    is_stock: bool
+
+@app.post(
+    "/items",
+    status_code=status.HTTP_201_CREATED,
+    reponse_model=Item
+)
+def create_item(item: Item):
+    """
+    Ex:
+      입력값: {"name": "바나나", "price": 10000, "is_stock": true}
+      출력값:
+        {
+        "item": {
+            "name": "바나나",
+            "price": 30,
+            "is_stock": true
+            }
+        }
+    """
+    return {"item": item}
+```
+일반적인 POST 요청이라고 한다면 `reponse_model`은 없을 것이다.
+이번 예제 코드를 만들면서 객체를 만들었기 때문에 응답값 반환의 타입을 명시해 보았다.
+만약, 반환값이 없다면 단순히 `reponse_model`를 지워주면 된다.
 
 ## 3. Paydantic
 ### [3-1] Paydantic의 기본
