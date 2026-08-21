@@ -1,0 +1,533 @@
+---
+title:  "SQLAlchemy2.0 동작 메커니즘의 이해를 위한 기초 학습 정리"
+desc: 코딩 자율 학습 FastAPI 파이썬 백엔드 개발 입문을 보며 SQLAlchemy2.0 를 학습한 내용을 정리했습니다. SQLAlchemy2.0의 동작 방식과 기본 개념을 주로 다루며, 책 내용 외적 학습 내용을 부록에 담았습니다. 이 기술서는 SQLAlchemy2.0 학습 초반에 매우 중요한 기술 문서입니다.
+date: 2026-08-22
+thumbnail: ./thumbnail.webp
+isHot: true
+isVisible: true
+tags: in progress, skill sheet, python.14, Fast API
+---
+
+### 참고자료
+1. <b>(도서) 코딩 자율 학습 FastAPI 파이썬 백엔드 개발 입문</b>
+    - 발행: 2026년 05월 20일
+
+---
+
+
+# SQLAlchemy2.0
+[주요 특징]
+- <b>ORM 지원</b>
+- <b>유연한 구조</b>
+- <b>다양한 DB 지원</b>
+- <b>풍부한 기능 제공</b>
+    : 테이블 간 관계 설정, 쿼리 빌더, 트랜잭션 관리 등 실무에 필요한 기능 제공
+
+SQLAlchemy는 DB 연동 라이브러리이자 ORM 도구이다.
+ORM 기본 기능뿐만 아니라 SQL을 직접 다룰 수 있는 기능도 제공하기 때문에 작은 프로젝트부터 대규모 서비스까지 폭넓게 활용할 수 있다. 
+
+SQLAlchemy는 ORM과 쿼리 기능을 제공하는 라이브러리이지만, 실제로 DB서버와 직접 통신하는 기능을 포함하지는 않는다. 그래서 DB에 접속하라면 별도의 드라이버가 필요하다. 현재 실습하는 책이서는 MySQL과 PyMySQL 드라이버를 사용중이기 때문에 이에 맞추어 진행할 것이다.
+
+추가적으로 다른 ORM 도구들 중 하나로 SQLModel이 있다.
+SQLModel은 FastAPI 팀이 SQLAlchemy의 ORM기능과 Pydantic의 데이터 검증 기능을 함께 사용할 수 있도록 개발한 라이브러리이다. <b>SQLModel을 사용하면 DB 모델과 API 요청-응답 모델을 하나의 코드로 정의할 수 있다.</b> SQLModel도 SQLAlchemy의 기본 지식이 있어야 사용할 수 있고, 비교적 최근에 등장한 라이브러리라 아직까지는 실무에서 SQLAlchemy를 더 널리 사용한다.
+
+## SQLAlchemy2.0
+### [1-1] SQLAlchmy의 엔진과 세션
+- 엔진: DB와의 실제 연결을 관리하는 객체
+- 세션: ORM이 DB와 상호작용할 때 사용하는 작업 단위
+
+### [1-2] SQLAlchemy를 사용한 DB 연동의 흐름
+1. 엔진을 생성하고, 그 엔진을 기반으로 세션을 생성한다.
+2. 세션을 통해 데이터를 생성, 조회, 수정, 삭제하며 이 과정에서 발생하는 모든 변경 사항을 세션이 관리한다.
+
+<b>세션은</b> 여러 요청이 함께 공유하는 대상이 아니므로 <b>요청마다 독립적으로 생성해야 한다.</b>
+요청마다 독립적인 세션을 사용하면 동시에 여러 요청을 처리하는 상황에서도 데이터 충돌을 방질 수 있고, 웹 애플리케이션 전체의 안정성과 유지보수성을 높일 수 있다.
+
+### [1-2] SQLAlchmy와 DB 연결
+```python
+# db_connection.py
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+# DB 연결 정보 설정
+DATABASE_URL = "mysql+pymysql://root:password@localhost:3306/fastapi_db"
+
+# 엔진 설정, echo = True: SQL 쿼리가 로그로 출력되어 디버깅에 도움
+engine = create_engine(DATABASE_URL, echo=True)
+
+SessionFactory = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    expire_on_commit=False,
+    bind=engine
+)
+```
+<b>DATABASE_URL</b>은 DB 연결 정보를 설정하고, <b>create_engine</b>는 엔진을 설정한다.
+엔진 설정에서 <b>echo=True</b>를 주면 SQL 쿼리가 로그를 출력하여 디버깅에 도움을 준다.
+
+<b>sessionmaker(...)</b>을 통해서 세션 생성 도구를 만든다.
+이 설정은 요청이 들어올 때마다 변수 SessionFactoty를 이용해 새로운 세션을 생성할 수 있다.
+<b>sessionmaker(...)</b>의 세부 속성은 아래와 같다.
+|속성과 옵션|설명|
+|---|---|
+|autocommit=False|세션에서 수행한 변경 사항을 자동으로 DB에 반영하지 않는다. 개발자가 commit()(세션에서 수행한 모든 변경 사항을 DB에 확정 저장하는 동작)을 호출해야만 변경 사항이 확정된다.|
+|autoflush=False|세션의 변경 내용을 자동으로 DB에 반영하지 않는다. 개발자가 flush()(세션에 쌓여 있는 변경 사항을 SQL로 변환해 DB에 실행하는 동작)를 호출해야 쿼리가 실행된다. |
+|expire_on_commit=False|commit() 이후에도 세션에 있는 객체의 값을 유지한다.|
+|bind=engine|이 세션이 사용할 DB 엔진을 지정한다.|
+
+[참고자료]
+- [Flush와 Commit의 차이](#b-2)
+- [sessionmaker(autoflush=True)일 경우의 동작원리](#b-4) 
+- [더팅체킹과 벌크업데이트](#b-5)
+
+### [1-3] ORM 모델 정의하기
+🧑🏻‍💻[예제 코드]: **DeclarativeBase**를 상속받는 Base 클래스의 정의
+```python
+# orm.py
+from sqlalchemy.orm import DeclarativeBase
+
+
+class Base(DeclarativeBase):
+    pass
+```
+
+| 구분 | 주요 역할 | 상세 설명 |
+| :--- | :--- | :--- |
+| **중앙 관리 탑 (Base)** | 모델 클래스 자동 추적 | `User`, `Post` 등 이 클래스를 상속받은 모든 모델을 SQLAlchemy가 인지하고 관리한다. |
+| **메타데이터 저장소 (Metadata)** | DB 구조 정보 집약 | 테이블 이름과 컬럼 타입 등 DB 구조에 관한 모든 정보를 한곳에 모아둔다. |
+| **테이블 생성 (`create_all`)** | 실제 DB 테이블 생성 | `Base.metadata.create_all(engine)` 명령 실행 시 메타데이터를 기반으로 DB에 테이블을 만든다. |
+
+먼저 **orm.py** 파일에 **Base 클래스**를 정의한다. **Base 클래스**는 <u>이 클래스를 상속받는 모든 클래스는 DB 테이블로 취급한다</u>라는 기준점이 된다.
+
+**DeclarativeBase**는 SQLAlchemy에서 파이썬 클래스와 DB 테이블을 연결(매핑)해 주는 최상위 부모 클래스이다.  <a href="https://docs.sqlalchemy.org/en/20/orm/declarative_styles.html" target="_blank">SQLAlchemy 2.0부터 도입된 표준 방식이다.</a>
+
+🧑🏻‍💻[예제 코드] Todo 모델
+```python
+from sqlalchemy import Integer, String, Boolean
+from sqlalchemy.orm import Mapped, mapped_column
+from database.orm import Base
+
+class Todo(Base):
+    __tablename__="todo"
+
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        autoincrement=True,
+    )
+    title: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+    is_done: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )
+
+    def __repr__(self) -> str:
+        return f"<Todo(id={self.id}, title='{self.title}', is_done={self.is_done})>"
+```
+**\_\_repr\_\_**는  실무환경에서 작성해주는 것이 표준적인 관행이다.
+이는 객체 **todo**를 만들었을 때 <b>print(todo)</b>를 호출하면, **\_\_repr\_\_**에 작성된 값으로 응답된다.
+
+🧑🏻‍💻[예제 코드]: 테이블 생성의 지시
+```python
+# main.py
+Base.metadata.create_all(bind=engine)   # SQLAlchemy가 정의된 모델 구조를 바탕으로 데이터베이스에 실제 테이블을 자동으로 생성
+```
+DB 테이블을 생성하기 위해 <b>Base.metadata.create_all(bind=engine)</b>을 작성해준다.
+
+### [1-4] SQLAlchemy를 이용한 조회
+🔥 SQLAlchemy2.X에서의 데이터 조회의 단계는 아래와 같다.
+| 순번 | 구분 | 설명 |
+|---|---|---|
+| 1 | 쿼리 객체 생성 | 데이터를 조회하는 쿼리 객체를 생성한다. |
+| 2 | 쿼리 실행 | 쿼리 객체를 DB에 전달해 실제 쿼리를 실행한다. <br/>이 과정에서 ORM은 내부적으로 SQL 쿼리를 생성한다. |
+| 3 | 결과 변환 | DB에서 반환된 결과를 파이썬 코드에서 다루기 쉬운 형태로 변환한다. <br/>ORM을 사용할 경우 테이블의 각 행에 대응되는 ORM 객체를 반환하므로 이를 리스트로 변환해 사용한다. |
+
+#### (1) 전체 할 일 조회하기
+```python
+# main.py의 /todos 코드 발췌
+@app.get(
+    path="/todos",
+    response_model=list[TodoResponse],
+    status_code=status.HTTP_200_OK
+)
+def get_todos():
+    session = SessionFactory()
+    try:
+        stmt = select(Todo)                   # 쿼리의 생성 (의미: 모든 행을 리스트 형태로 가져온다.)
+        todos = session.execute(stmt).all()   # 실행 + 결과 반환
+        return todos
+    finally:
+        session.close()
+```
+- <b>session = SessionFactory()</b>
+: DB와 통신하기 위한 세션(연결)을 생성한다.
+- <b>stmt = select(Todo)</b>
+: SQLAlchemy2.0 스타일의 쿼리 작성법으로, Todo테이블의 모든 레코드를 선택한다.
+- <b>session.execute(stmt).all()</b>
+: 작성한 쿼리를 DB에 실행하고, 그 결과의 모든 행을 리스트 형태로 가져온다.
+- <b>finally: session.close()</b>
+: 쿼리 성공 여부나 예외 발생없이 마지막에 반드시 DB 연결을 닫아 자원 누수를 방지한다.
+
+🔥 <b>stmt</b>는 Statement의 약자이다. <u>SQLAlchemy2.0의 공식 네이밍 컨벤션이자 현업 표준</u>이다.
+SQLAlchemy1.X 버전에서는 `session.query(Todo).all()`처럼 세션 객체에서 직접 쿼리를 만들고 실행했다. 하지만 SQLAlchemy2.X 버전부터는 <u> '쿼리 생성'과 '실행'을 명확히 분리 </u>하는 구조로 변경되었다.
+따라서 실행할 SQL 명령어를 미리 정의해 두는 변수라는 것을 명확하기 위해 `stmt = select(Todo)`와 같이 `stmt`라는 이름을 관습적으로 사용한다. 필요에 따라서는 `query`라고 명명하는 조직도 있다.
+
+#### (2) 단일 할 일 조회하기
+```python
+@app.get(
+    path="/todos/{todo_id}",
+    response_model=TodoResponse,
+    status_code=status.HTTP_200_OK
+)
+def get_todo(todo_id: int):
+    session = SessionFactory()
+    try:
+        stmt = select(Todo).where(Todo.id == todo_id)   # 단일 조회 쿼리 객체 생성
+        todo = session.execute(stmt).scalar().first()   # 쿼리 실행 및 단일 결과 선택
+
+        if todo:
+            return todo
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Todo not found."
+        )
+    finally:
+        session.close()
+```
+- **stmt = select(Todo).where(Todo.id == todo_id)**
+: 단일 데이터를 조회하는 쿼리 객체(stmt)를 생성한다.
+- **result = session.execute(stmt).scalars().first()**
+: session.execute(stmt)로 쿼리 객체를 실제 DB에 전달해 실행한다.
+.scalars().first는 실행 결과에서 첫 번째 ORM 객체만 선택하라는 의미다.
+조건에 맞는 데이터가 없으면 **None**을 반환한다.
+
+### [1-5] SQLAlchemy를 이용한 데이터 생성과 수정
+🔥 SQLAlchemy2.X에서의 데이터 생성의 단계는 아래와 같다.
+| 순번 | 구분 | 설명 |
+| --- | --- | --- |
+| 1 | 모델 객체 생성 | 요청으로 전달된 데이터를 사용해 ORM 모델 객체를 생성한다. <br/> 이때 id는 직접 지정하지 않아도 DB의 자동 증가 기능에 의해 값이 자동으로 할당 된다. |
+| 2 | 세션에 등록 | 생성한 모델 객체를 session.add()로 세션에 등록한다. |
+| 3 | 변경 사항 저장 | session.commit() 을 호출해 세션에 등록된 변경 사항을 DB에 실제로 저장한다. |
+
+🔥 SQLAlchemy2.X에서의 데이터 수정의 단계는 아래와 같다.
+| 순번 | 구분 | 설명 |
+| --- | --- | --- |
+| 1 | 수정 대상 조회 | 수정 대상의 데이터를 조회한다. |
+| 2 | ORM 객체 값 변경 | 수정 대상의 데이터가 존재하면, 수정하고 싶은 항목의 요청 값에 대해 속성을 변경한다.|
+| 3 | 변경 사항 저장 | ORM 모델 객체의 속성을 변경하면 세션이 이 변경 내용을 자동으로 추적한다. <br/>이 상태에서 commit()을 호출하면 세션에 기록된 변경 사항이 하나의 작업 단위로 묶여 DB에 반영된다. commit()을 호출하지 않으면 변경 내용은 실제 DB에 저장되지 않는다. |
+
+#### (1) 할 일 생성하기
+```python
+@app.post(
+    path="/todos",
+    response_model=TodoResponse,
+    status_code=status.HTTP_201_CREATED
+)
+def create_todo_handler(body: TodoRequest):
+    session = SessionFactory()
+    try:
+        
+        todo = Todo(                        
+            title=body.title,
+            is_done=body.is_done,
+        )                               # ORM 모델 객체의 생성
+        session.add(todo)               # 생성한 모델 객체를 세션에 등록
+        session.commit()                # DB에 실제 반영
+        return todo 
+    finally:
+        session.close()
+```
+주요 코드의 흐름은 아래와 같다.
+1. Todo ORM 모델 객체를 생성하고
+2. session.add() 함수를 통해 세션에 등록한 뒤
+3. session.commit()을 통해 DB에 실제로 저장한다.
+
+#### (2) 할 일 수정하기
+```python
+@app.patch(
+    path="/todos/{todo_id}",
+    response_model=TodoResponse,
+    status_code=status.HTTP_200_OK
+)
+def update_todo(todo_id: int, body: TodoRequest):
+    session = SessionFactory()
+    try:
+        stmt = select(Todo).where(Todo.id == todo_id)           # 수정 대상 조건 조회
+        todo = session.execute(stmt).scalars().first()          # 실행 + 결과 반환
+
+        if todo:                                                # 업데이트 대상 조건 분기
+            if body.title is not None:
+                todo.title = body.title
+            if body.is_done is not None:
+                todo.is_done = body.is_done
+            session.commit()                                    # DB에 반영 (객체값의 변경이 되면 자동 UPDATE)
+            return todo
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Todo not found."
+        )
+    finally:
+        session.close()
+```
+
+### [1-6] SQLAlchemy를 이용한 데이터 삭제
+🔥 SQLAlchemy2.X에서의 데이터 삭제의 단계는 아래와 같다.
+| 순번 | 구분 | 설명 |
+| --- | --- | --- |
+| 1 | 삭제 대상 조회 | 수정 대상의 데이터를 조회한다. |
+| 2 | 세션에 등록 | 삭제 대상 모델 객체를 session.delete()로 세션에 등록한다. |
+| 3 | 변경 사항 저장 | session.commit() 을 호출해 세션에 등록된 변경 사항을 DB에 실제로 저장한다. |
+
+#### (1) 할 일 삭제하기
+```python
+
+```
+
+[참고 자료]
+- [FastAPI의 의존성 주입 방식](#b-7)
+
+
+
+
+
+---
+
+## 🌱 부록
+### 1. 넓은 의미의 세션
+    - 세션은 사용자가 시스템에 연결된 기간이나 연결 상태를 의미한다.
+    - 로그인 정보 등 임시 데이터를 서버에 저장하여 사용자를 구분하는 기술도 세션이다.
+
+### 2. <span id="b-2">Flush와 Commit의 차이</span>
+    - Flush: DB에 변경 사항을 <b>임시로 전송</b>하는 작업
+    - Commit: 그 변경 사항을 DB에 <b>영구적으로 확정</b>하는 작업
+
+        | 구분 | session.flush() | session.commit() |
+        |---|---|---|
+        | 핵심 역할 | 대기 중인 SQL(INSERT, UPDATE 등)을 DB로 전송 | 변경 사항을 DB에 영구적으로 반영 |
+        | DB 상태 | 임시 반영 상태 (다른 세션에서는 보이지 않음) | 영구 반영 상태 (다른 세션에서도 조회 가능) |
+        | 트랜잭션 상태 | 현재 트랜잭션이 계속 유지 됨 | 현재 트랜잭션이 종료됨 (새 트랜잭션 대기) |
+        | 롤백 | 에러 발생시 언제든 취소 가능 | 취소 불가능 (이미 완료됨)|
+        | 주요 사용 목적 | DB에서 자동 생성되는 PK(ID)값을 미리 받아와야 할 때 | 모든 작업이 성공적으로 끝났음을 선언할 때 |
+    
+    🧑🏻‍💻[예제 코드]
+    : Flush, 부모 데이터를 생성하고, 부모의 ID를 사용해 자식 데이터를 채워줘야 하는 경우
+    ```python
+    from sqlalchemy.orm import Session
+
+    def create_user_with_profile(session: Session, username: str, bio: str):
+        try:
+            # 1. 유저 객체 생성 및 세션 추가 (아직 DB 전송 전)
+            new_user = User(username=username)
+            session.add(new_user)
+            
+            # 2. 플러시 호출: INSERT 쿼리가 DB로 전송됨
+            # 트랜잭션은 유지되지만, DB가 new_user.id 값을 할당하여 파이썬 객체에 채워줌
+            session.flush() 
+            
+            # 3. 플러시 덕분에 new_user.id를 안전하게 사용할 수 있음
+            user_profile = Profile(user_id=new_user.id, bio=bio)
+            session.add(user_profile)
+            
+            # 4. 모든 작업이 정상 처리되었으므로 최종 확정
+            session.commit()
+            return new_user
+            
+        except Exception:
+            # 중간에 에러가 나면 flush()로 전송된 유저 데이터까지 모두 안전하게 취소됨
+            session.rollback()
+            raise
+    ```
+
+### <span id="b-3">3. sessionmaker(autoflush=True)는 적극적으로 사용되고 있다.</span>
+    - 
+        모던한 FastAPI에서는 <b>특정한 상황이 아니라면 sessionmaker(autoflush=True)</b>가 적극적으로 사용된다고 한다.
+    - 
+        메모리(세션)에서는 데이터를 수정했는데 아직 DB로 쿼리를 안 보낸 상태에서, 
+        다시 조건 검색(SELECT)을 하면 어떻게 될까? 구체적인 예시 상황은 아래와 같다.
+
+        | 순번 | 구분 | 설명 |
+        |---|---|---|
+        | 1 | 메모리 상태 | A 유저의 나이를 20살에서 30살로 변경 |
+        | 2 | 조회 로직 | 나이가 30살인 유저를 모두 찾는 SELECT 쿼리 실행 |
+        | 3 | 문제 발생 | DB 입장에서는 A 유저가 아직 20살이므로 검색 결과에 A유저의 누락 |
+        
+        <b>autoflush=False</b>인 상황에서 위의 문제를 해결 하기 위해서는 SELECT 쿼리를 날리기 직전에 무조건 flush()를 호출하여 메모리 변경 사항을 DB와 동기화 시켜야 정확한 검색 결과를 얻을 수 있다. 
+        <b>authflush=True</b>였다면  <b>프레임워크가 쿼리가 실행되기 전</b>이나 <b>커밋되기 전</b>에 알아서 플러시를 수행하도록 위임한다.
+        
+### <span id="b-4">4. sessionmaker(autoflush=True)의 내부 동작원리</span>
+    - 
+        [sessionmaker(autoflush=True)는 적극적으로 사용되고 있다.](#b-3)에 기술된 구체적인 상황을 기준으로 내부 동작을 설명하겠다. 내부 동작의 원리는 아래와 같다.
+
+
+        | 단계 | 과정 | 주요 동작 및 핵심 원리 | DB 전송 쿼리 |
+        | :--- | :--- | :--- | :--- |
+        | **1단계** | **객체 수정 (Dirty)** | 파이썬 메모리에서 `user.age = 30`으로 값을 변경합니다. SQLAlchemy 세션이 이 객체를 변경된 상태(Dirty)로 감지합니다. | 없음 (메모리만 변경) |
+        | **2단계** | **조회 요청 발생** | "나이가 30살인 유저를 찾아라"와 같은 `SELECT` 쿼리 실행 트리거가 발생합니다. | `SELECT` (대기 중) |
+        | **3단계** | **Autoflush 개입** | 세션이 `SELECT`를 보내기 직전, Dirty 객체를 감지하고 `UPDATE` 쿼리를 DB로 먼저 전송(Flush)하여 트랜잭션 내 DB 상태를 최신화합니다. | **`UPDATE` (선행 전송)** |
+        | **4단계** | **DB 검색 수행** | 최신화된 DB 데이터 위에서 `SELECT` 쿼리가 실행되고, 결과 행(Row)들이 파이썬으로 반환됩니다. | **`SELECT` (실행)** |
+        | **5단계** | **식별 맵 매핑** | 반환된 결과의 PK를 확인합니다. 이미 메모리에 존재하는 객체라면 새 객체를 만들지 않고 **기존 메모리 객체를 그대로 반환**합니다. | 없음 (메모리 재사용) |
+
+
+        SQLAlchemy의 UoW(Unit of Work)패턴을 활용한 핵심 데이터 수정 방식으로 더티 체킹이 진행된다.
+        이는 비즈니스 로직 내에서 명시적인 UPDATE 쿼리를 작성하지 않더라도 파이썬 객체의 속성만 변경하여 트랜잭션 커밋 시점에 자동으로 쿼리가 날아가도록 한다.
+
+### <span id="b-5">5. 더팅체킹과 벌크업데이트</span>
+    -   
+        더티 체킹은 단일 엔티티나 소수의 연관 관계 데이터를 다루는 비즈니스 로직에서는 매우 우아한 방식이다.
+        하지만, 대용량 데이터 처리 시에는 치명적인 성능 저하를 유발할 가능성이 높다.
+        
+        | 분류 | 더티 체킹 (Dirty Checking) | 벌크 업데이트 (Bulk Update) |
+        | :--- | :--- | :--- |
+        | **핵심 방식** | 메모리 객체의 변경 사항을 감지하여 자동 반영 | `session.execute(update(...))` 등으로 DB 직접 명령 |
+        | **쿼리 발생 횟수** | **수정된 데이터 개수만큼 (1,000건 수정 시 1,000번)** | **데이터 양과 무관하게 단 1번 (`1번의 쿼리`)** |
+        | **주요 한계점** | 대량 데이터 수정 시 성능 저하 (N+1과 유사한 현상) | 영속성 컨텍스트(식별 맵)와 DB 상태 간 불일치 위험 |
+        | **식별 맵 동기화** | 파이썬 메모리 객체와 DB 상태가 실시간 동기화됨 | DB만 수정되므로 필요 시 세션 만료(`expire_all`) 필요 |
+        | **실무 권장 전략** | **단건 또는 소규모** 비즈니스 로직 수정 시 사용 | <b>대규모 데이터(수십 건 이상)</b>의 일괄 변경 시 사용 |
+
+### 6. 벌크 업데이트를 실행할 때 발생하는 메모리(Identity Map)와 DB의 데이터 불일치 현상
+    -
+        벌크 업데이트 시 데이터 불일치가 발생하는 원인은 <u>벌크 쿼리기 SQLAlchemy세션(메모리)을 거치지 않고 DB로 직접 전달되기 때문이다.</u>
+            - 일반 수정: 파이썬 객체를 거치므로 메모리(Identity Map)가 먼저 수정되고 DB에 반영된다.
+            - 벌크 수정: 메모리를 완전히 건너뛰고 DB 데이터만 직접 타격하여 수정한다.
+            - 결과: DB 데이터는 변경되었지만, 파이썬 메모리에는 과거 데이터가 그대로 남아있는 불일치가 발생한다.
+
+        메모리와 DB의 데이터 불일치 현상을 해결하는 방법은 아래와 같다.
+
+        | 해결 기법 | 동작 방식 | 장점 | 단점 및 주의점 |
+        | :--- | :--- | :--- | :--- |
+        | <b>`synchronize_session='evaluate'`</b> <br/>*(SQLAlchemy 기본값)* | 쿼리의 `where` 조건절을 파이썬 코드로 분석하여 **메모리에 로드된 객체들을 자동으로 찾아 수정**합니다. | 쿼리 1번으로 DB와 메모리가 모두 최신화되어 안전합니다. | 복잡한 JOIN이나 SQL 함수가 포함된 조건절은 파이썬이 해석하지 못해 에러가 발생합니다. |
+        | **`synchronize_session='fetch'`** | 벌크 업데이트를 실행하기 전에 **영향을 받는 객체들의 ID를 DB에서 먼저 조회(SELECT)**한 뒤 메모리를 수정합니다. | 복잡한 조건절도 완벽하게 지원하며 데이터 일치성이 높습니다. | 대상 데이터를 찾기 위한 **추가 SELECT 쿼리가 발생**하므로 성능 손실이 있습니다. |
+        | **`synchronize_session=False`** <br/>+ `session.expire_all()` | **메모리 동기화를 완전히 생략**하고 DB만 빠르게 수정한 뒤, 세션을 만료시켜 이후 조회 시 DB에서 다시 읽어오게 합니다. | 파이썬 연산이 전혀 없어 **가장 빠르며**, 대용량 배치(Batch) 작업에 아주 유리합니다. | 업데이트 후 `expire_all()`을 빼먹으면 메모리에 **과거 데이터(Stale Data)가 남는 위험**이 있습니다. |
+
+### 🔥 <span id="b-7">7. FastAPI의 의존성 주입 방식</span>
+    -   
+        | 순번 | 구분 | 설명 |
+        |---|---|---|
+        | 1 | 제공자(Provider)정의 | 의존성을 생성하고 반환하는 함수나 클래스를 만든다. |
+        | 2 | 주입(Injection)선언 | API 엔드포인트 함수의 매개변수에 `Depends(제공자)`를 선언한다. |
+        | 3 | 실행 | FastAPI는 요청이 들어오면 먼저 `제공자`를 실행하고, <br />그 결과값을 엔드포인트 함수의 매개변수로 쏙 넣어준다. |
+
+        아래의 내용은 FastAPI에서 기본적인 MVC패턴으로 기반으로하여금 DI를 하는 설명이다.
+
+        1. <b>Repository 계층</b>
+        : 오직 DB와의 통신 CRUD만 담당하고 비즈니스 로직은 포함하지 않는다.
+        ```python
+        from sqlalchemy.orm import Session
+        from sqlalchemy import select
+
+        class TodoRepository:
+            # 생성자를 통해 Database Session을 주입받음
+            def __init__(self, session: Session):
+                self.session = session
+
+            def find_all(self) -> list[Todo]:
+                stmt = select(Todo)
+                return self.session.execute(stmt).scalars().all()
+        ```
+        생성자를 통해 Database Session을 주입받는다.
+
+        2. <b>Service 계층</b>
+        : DB가 무엇인지(SQLAlchemy 등) 전혀 모른 채, 
+        오직 TodoRepository에만 의존하여 비즈니스 로직을 수행한다.
+        ```python
+        class TodoService:
+        # 생성자를 통해 Repository를 주입받음
+        def __init__(self, todo_repo: TodoRepository):
+            self.todo_repo = todo_repo
+
+        def get_all_todos(self) -> list[Todo]:
+            # 여기에 비즈니스 로직 추가 (예: 권한 체크, 데이터 가공, 캐싱 등)
+            todos = self.todo_repo.find_all()
+            
+            # 만약 목록이 비어있다면 에러를 던지는 식의 비즈니스 룰 적용 가능
+            if not todos:
+                pass # logging.info("No todos found")
+                
+            return todos
+        ```
+
+        3. **의존성 주입을 위한 Provider (FastAPI Dactories)**
+        : Spring Boot의 `@Configuration` 및 `@Bean`등록과 유사한 역할을 한다.
+        FastAPI가 의존성을 어떻게 생성할지 정의한다.
+        ```python
+        from fastapi import Depends
+
+        # 3-1. DB 세션 주입
+        def get_db():
+            db = SessionFactory()
+            try:
+                yield db
+            finally:
+                db.close()
+
+        # 3-2. Repository 생성 및 DB 세션 주입
+        def get_todo_repository(session: Session = Depends(get_db)) -> TodoRepository:
+            return TodoRepository(session)
+
+        # 3-3. Service 생성 및 Repository 주입
+        def get_todo_service(repo: TodoRepository = Depends(get_todo_repository)) -> TodoService:
+            return TodoService(repo)
+        ```
+        파이썬 문법의 `yield` 키워드는 <u>함수 안에서 값을 반환하고 실행을 잠시 멈춘 뒤, 나중에 다시 그 위치에서 실행을 이어 갈 수 있게 만드는 제너레이터(Generator) 생성 키워드다.</u> 값을 한 번에 하나씩 만들어내어 메모리를 아끼는 데 사용된다.
+            
+            - 
+                🧑🏻‍💻[예제 코드]: `yiled` 키워드의 이해를 돕는 코드
+                ```python
+                def number_generator():
+                    yield 1
+                    yield 2
+                    yield 3
+
+                # 제너레이터 객체 생성
+                gen = number_generator()
+
+                print(next(gen))  # 1 출력
+                print(next(gen))  # 2 출력
+                ```
+        
+        FastAPI는 `yield` 키워드가 포함된 함수를 의존성(Depends)으로 주입받을 때, 이를 <u>요청의 시작과 끝을 함께하는 생명 주기 관리자로 해석되어진다.</u> 코드의 흐름 해석(요청에서 응답까지)는 아래와 같다.
+
+        | 단계 | 수행 과정 | 상세 동작 및 역할 |
+        | :--- | :--- | :--- |
+        | **1단계** | **`get_db()` 실행 시작** | `SessionFactory()`를 호출하여 새로운 DB 세션(`db`)을 생성합니다. |
+        | **2단계** | **`yield db`에서 일시 정지** | 생성된 세션을 `get_todo_repository`로 넘겨주고, `get_db` 함수는 그 자리에 멈춰 섭니다. |
+        | **3단계** | **Repository 및 Service 생성** | 주입받은 세션으로 `TodoRepository`를 만들고, 이를 다시 `TodoService`에 주입하여 컨트롤러/라우터로 전달합니다. |
+        | **4단계** | **비즈니스 로직 수행** | 라우터에서 API 요청에 필요한 모든 DB 작업을 처리하고, 클라이언트에 보낼 응답을 준비합니다. |
+        | **5단계** | **`finally` 블록으로 복귀** | 응답이 나가기 직전 FastAPI가 `yield` 다음 줄을 실행하여, `db.close()`로 DB 커넥션을 안전하게 반환합니다. |
+
+        <br/>
+
+        주요 구성 요소별 해석은 아래와 같다.
+
+        | 구성 요소 | 해석 및 역할 |
+        | :--- | :--- |
+        | **`yield db`** | `return` 대신 `yield`를 사용함으로써, DB 세션의 생명 주기를 **FastAPI의 HTTP 요청-응답 주기(Request-Response Cycle)**와 동기화한다. |
+        | **`try ... finally`** | 비즈니스 로직에서 에러(Exception)가 발생하더라도, **무조건 `db.close()`가 실행되도록 보장**하여 DB 커넥션 누수(Leak)를 방지한다. |
+        | **`Depends(...)` 체이닝** | `Service ➔ Repository ➔ DB 세션`으로 이어지는 계층 구조를 명시적이고 **결합도가 낮게(Loose Coupling)** 연결한다. |
+
+        4. **Controller 계층 (FastAPI Router)**
+        : HTTP 요청/응답만 처리하며 비즈니스 로직은 `TodoService`에 위임한다.
+        ```python
+        from fastapi import APIRouter, Depends, status
+
+        router = APIRouter()
+
+        @router.get(
+            path="/todos",
+            response_model=list[TodoResponse],
+            status_code=status.HTTP_200_OK
+        )
+        def get_todos(todo_service: TodoService = Depends(get_todo_service)):
+            # Controller는 DB가 뭔지, 어떻게 가져오는지 모릅니다. Service에 위임할 뿐입니다.
+            return todo_service.get_all_todos()
+        ```
+
+        클라이언트가 `/todos`를 호출하면 FastAPI는 내부적으로 다음과 같이 `Depends`체인을 밑에서부터 위로 해결한다.
+        1. `get_db()`실행 -> `Session`객체 생성
+        2. `Session`객체를 `get_todo_repository()`에 주입 -> `TodoRepository`객체 생성
+        3. `TodoRepsotory`객체를 `get_todo_service()`에 주입 -> `TodoService`객체 생성
+        4. 최종적으로 완성된 `TodoService`객체를 라우터 함수 `get_todos()`에 주입
