@@ -1,6 +1,6 @@
 ---
-title:  "Fast API(python.14) 학습 정리"
-desc: Fast API(python.14)를 학습하며 정리한 내용입니다.
+title:  "Fast API(python.14) 동작 메커니즘의 이해를 위한 기초 학습 정리"
+desc: 코딩 자율 학습 FastAPI 파이썬 백엔드 개발 입문을 보며 FastAPI를 학습한 내용을 정리했습니다. FastAPI의 동작 방식과 기본 개념을 주로 다루며, 책 내용 외적 학습 내용을 부록에 담았습니다. 이 기술서는 FastAPI 학습 초반에 매우 중요한 기술 문서입니다.
 date: 2026-08-20
 thumbnail: ./thumbnail.webp
 isHot: true
@@ -74,7 +74,7 @@ def read_tems_handler(max_price: int | None = None):
 🤔 단순히 매개 변수 정의로 쿼리 파라미터로 어떻게 추론할 수 있는 것일까?
     - 파이썬의 타입 힌트(Type Hints)와 내부적인 우선순위 추론 규칙을 조합하여 함수의 구조를 분석하기 때문이다. FastAPI 생태계에서는 파이썬 3.9 이상에서 지원하는 Annotated를 사용하는 것이 완벽한 표준 트렌드로 자리 잡았기 때문에 정확한 이해를 위한 딥다이브는 하지 않아도 된다.
 
-🧑🏻‍💻[예제 코드]: Modern, 파이썬 3.9이상 지원
+🔥 🧑🏻‍💻[예제 코드]: Modern, 파이썬 3.9이상 지원
 ```python
 @app.get(
     "/items",
@@ -168,8 +168,11 @@ price
     For further information visit https://errors.pydantic.dev/2.13/v/int_parsing
 """
 ```
-Paydatic으로 데이터를 검증하기 위해서는 BaseModel을 상속받아 Pydantic 모델을 정의해야한다.
+Paydatic으로 데이터를 검증하기 위해서는 <u>BaseModel을 상속받아 Pydantic 모델을 정의</u>해야한다.
 이렇게 정의한 모델을 활용하면 요청 데이터가 지정된 타입과 구조를 따르는지 자동으로 검사하고 잘못된 값이 들어오면 오류를 발생시킨다. <sup>[타입 힌트를 사용하면 Paydantic을 사용할 필요가 없지않나?](#b-8)</sup>
+`**`는 언패킹이라고 하며, 딕셔너리나 리스트 같은 자료구조에 들어 있는 값을 변수나 함수 인자로 풀어서 전달하는 것으로, 코드가 실행되면 Item 객체가 생성된다.
+
+
 
 
 ---
