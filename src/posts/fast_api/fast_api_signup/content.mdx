@@ -1,0 +1,174 @@
+---
+title:  "Fast API(python.14) 회원가입 구현"
+desc: 코딩 자율 학습 FastAPI 파이썬 백엔드 개발 입문을 보며 05장 회원가입 구현하기를 보며 학습한 내용을 기술합니다.
+date: 2026-08-22
+thumbnail: ./thumbnail.webp
+isHot: true
+isVisible: true
+tags: Fast API, Sign up
+---
+
+### 참고자료
+1. <b>(도서) 코딩 자율 학습 FastAPI 파이썬 백엔드 개발 입문</b>
+    - 발행: 2026년 05월 20일
+
+# 1. Fast API(python.14) 회원가입 구현
+## [1-1] 회원가입 처리 과정
+- 요청 데이터 검증
+- 이메일 중복 검사
+- 비밀번호 보안 처리 (해시처리)
+- 최종 저장
+
+## [1-2] User모델의 생성과 연관관계 지정
+🧑🏻‍💻[예제 코드]: 프로젝트에 반영되어 있는 Todo 모델
+```python
+# model.py
+from datetime import datetime
+
+from sqlalchemy import Integer, String, Boolean, DateTime, ForeignKey, func
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from database.orm import Base
+
+class Todo(Base):
+    __tablename__="todo"
+
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        autoincrement=True,
+    )
+    title: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+    is_done: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )
+
+    def __repr__(self) -> str:
+        return f"<Todo(id={self.id}, title='{self.title}', is_done={self.is_done})>"
+```
+User 모델 새롭게 생성해야하며, Todo 모델은 초기에 위와 같은 코드로 존재한다.
+요구사항에서는 User와 Todo의 관계가 1:N이다. 이를 반영하기 위해 Todo를 아래처럼 수정한다.
+
+🧑🏻‍💻[예제 코드]: User와 Todo의 관계를 1:N로 반영하기 위한 Todo 모델 수정
+```python {25, 29}
+from datetime import datetime
+
+from sqlalchemy import Integer, String, Boolean, DateTime, ForeignKey, func
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from database.orm import Base
+
+class Todo(Base):
+    __tablename__="todo"
+
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        autoincrement=True,
+    )
+    title: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+    is_done: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )
+    user_id: Mapped[int] = mapped_column(   # DB 테이블에 생성되는 외래키 컬럼 => JPA의 @JoinColumn(name="user_id")와 같다.
+        ForeignKey("user.id"),
+        nullable=True
+    )
+    user: Mapped[User] = relationship(      # DB에는 존재하지 않지만 연관된 객체를 바로 탐색(객체 그래프 탐색)할 수 있게 해주는 가상 속성
+        back_populates="todos"
+    )
+
+    def __repr__(self) -> str:
+        return f"<Todo(id={self.id}, title='{self.title}', is_done={self.is_done})>"
+```
+수정을 한 Todo는 user_id와 user 속성값이 추가되었다.
+
+1. user_id
+    
+    -   
+        **user_id: Mapped[int] (물리적 컬럼 생성)**
+        : 실제 DB의 todo 테이블에 user_id라는 정수형 커럼을 만든다.
+    -   
+        **ForeginKey("user.id") (DB제약조건 강제)**
+        : DB엔진에게 "이 컬럼은 반드시 user 테이블의 id 컬럼에 존재하는 값만 가져야 한다"는 외래키 참조 무결성을 강제한다. 중요한 핵심은 user.id가 파이썬 클래스가 아닌 **실제 DB테이블의 이름과 컬럼**을 가리킨다는 것이다.
+    -
+        **nullable=True (관계의 선택성)**
+        : 특정 사용자에 소속되지 않은(주인이 없는) Todo 데이터도 DB에 저장할 수 있도록 허용한다.
+2. user
+
+    -
+        **user: Mapped["User"] (객체 그래프 탐색)**
+        : DB에서 todo 데이터를 가져왔을 때, todo.user_id 처럼 숫자 값만 보는것이 아니라 todo.user.username처럼 연관된 User 객체의 속성에 마침표를 찍어 바로 접근 할 수 있도록 한다.
+
+    - 
+        **relationship(...) (가상 속성 선언)**
+        : 이 속성은 실제 DB 테이블의 컬럼으로 만들어지지 않는다. SQLAlchemy가 런타임에 두 테이블을 조언(Join)하여 파이썬 객체로 조립해 주기 위해 사용하는 ORM 전용 설정이다.
+
+    -
+        **back_populates="todos" (양방향 메모리 동기화)**
+        : 반대편 User 클래스에 정의될 todos 속성과 연결고리를 만든다. 파이썬 코드 상에서 todo.user = some_user 라고 할당 되면, 즉시 some_user.todos 리스트에도 이 todo 객체가 자동으로 추가되도록 메모리 상태를 동기화해준다.
+    
+<br/>
+
+```python { 28 }
+# models.py
+from datetime import datetime
+
+from sqlalchemy import Integer, String, Boolean, DateTime, ForeignKey, func
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from database.orm import Base
+
+# ... 
+# ...
+class User(Base):
+    id: Mapped[int] = mapped_column(primary_key= True)
+    email: Mapped[str] = mapped_column(
+        String(255),
+        unique=True,
+        index=True,
+        nullable=False,
+    )
+    hashed_password: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        server_default=func.now(),
+        nullable=False,
+    )
+    todos: Mapped[list["Todo"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+```
+
+1.  todos
+
+    -
+        list["Todo"]
+        : 한 명의 유저가 여러 개의 할 일을 가질 수 있도록 list 타입으로 묶고, 대상 모델을 Todo처럼 문자열로 적어준 것은 순환 참조 에러를 방지하기 위한 파이썬 백엔드의 표준 관례이다.
+    -   
+        back_populates="user"
+        : Todo 클래스에 있는 user 속성과 연결하여 양방향 매핑의 거울 역할을 한다.
+
+    -   
+        casecade="all, delete-orphan"
+        : 영속성 전이를 설정한다. all은 부모가 저장되거나 삭제될 때, 자식들도 똑같이 그 상태를 따라간다는 것이고 delete-orphan은 부모의 todos 리스트에서 특정 Todo 객체를 제거하면(연결을 끊으면) DB 테이블에서도 해당 Todo 데이터를 완전히 DELETE 해버린다.
+
+
+---
+
+####  이후 미작성 
+작성예정
