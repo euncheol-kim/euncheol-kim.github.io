@@ -1,10 +1,2254 @@
 ---
-title:  "SQLAlchemy2.0 기반의 객체 연관관계"
-desc: SQLAlchemy2.0 기반의 객체 연관관계에 대해서 학습하고 기술합니다.
-date: 2026-08-22
+title:  "[Author:ChatGPT] Spring/JPA 개발자를 위한 FastAPI + SQLAlchemy 객체 관계 정리"
+desc: Spring Boot와 JPA에 익숙한 개발자가 FastAPI와 SQLAlchemy에서 단방향·양방향 관계, ForeignKey, relationship, 로딩 전략, Cascade를 이해하기 위한 정리
+date: 2026-08-23
 thumbnail: ./thumbnail.webp
 isHot: true
 isVisible: true
-tags: Fast API, Sign up
+tags: Author:ChatGPT, FastAPI, SQLAlchemy, Python, ORM, JPA, Backend
 ---
 
+# Spring/JPA 개발자를 위한 FastAPI + SQLAlchemy 객체 관계 정리
+
+Spring Boot와 JPA를 공부하다가 FastAPI를 접하면 객체 간 관계를 어떻게 설정해야 하는지부터 헷갈리기 쉽다.
+
+JPA에서는 `@ManyToOne`, `@OneToMany`, `mappedBy`, `@JoinColumn` 같은 애너테이션을 사용해서 관계를 표현한다. 반면 FastAPI에서는 이런 기능을 직접 제공하지 않는다.
+
+이 차이를 먼저 이해해야 한다.
+
+> **FastAPI는 웹 프레임워크이고, 객체와 데이터베이스 사이의 관계는 SQLAlchemy 같은 ORM이 담당한다.**
+
+따라서 FastAPI에서 객체 관계를 공부한다고 표현하더라도, 실제로 공부해야 하는 핵심은 **SQLAlchemy ORM의 관계 매핑 방식**이다.
+
+이 글에서는 Spring Boot와 JPA를 학습한 경험이 있다는 전제에서 SQLAlchemy의 관계를 비교하며 정리한다.
+
+---
+
+## 1. FastAPI와 SQLAlchemy의 역할부터 구분하자
+
+Spring Boot에서는 보통 다음과 같은 조합을 사용한다.
+
+```text
+Spring Boot
+    ↓
+Spring Data JPA
+    ↓
+JPA / Hibernate
+    ↓
+Database
+```
+
+FastAPI는 조금 다르다.
+
+```text
+FastAPI
+    │
+    ├── SQLAlchemy
+    ├── SQLModel
+    ├── Tortoise ORM
+    ├── 직접 SQL
+    └── 기타 데이터베이스 라이브러리
+```
+
+FastAPI 자체에는 다음과 같은 개념이 없다.
+
+```java
+@OneToMany
+@ManyToOne
+@OneToOne
+@ManyToMany
+```
+
+이런 객체-관계 매핑은 ORM이 담당한다.
+
+FastAPI 공식 SQL 예제에서는 SQLModel을 사용하지만, FastAPI가 SQLModel이나 SQLAlchemy를 반드시 사용하도록 강제하는 것은 아니다.
+
+이 글에서는 Python 생태계에서 널리 사용되는 SQLAlchemy ORM을 기준으로 설명한다.
+
+---
+
+## 2. JPA와 SQLAlchemy를 먼저 대응시켜 보자
+
+두 기술은 내부 구조와 철학이 완전히 같지는 않다. 따라서 정확한 1:1 대응이라고 생각하면 안 된다.
+
+다만 처음 개념을 잡는 용도로는 다음과 같이 비교할 수 있다.
+
+| JPA / Hibernate           | SQLAlchemy                            |
+| ------------------------- | ------------------------------------- |
+| `@Entity`                 | ORM Mapped Class                      |
+| `@Table`                  | `__tablename__`                       |
+| `@Id`                     | `mapped_column(primary_key=True)`     |
+| `@Column`                 | `mapped_column()`                     |
+| `@ManyToOne`              | `ForeignKey` + `relationship()`       |
+| `@OneToMany`              | `relationship()`                      |
+| `@OneToOne`               | Scalar `relationship()` + DB `UNIQUE` |
+| `@ManyToMany`             | Association Table + `secondary`       |
+| `mappedBy`                | 정확히 동일한 개념은 없음             |
+| `FetchType.LAZY`          | Lazy Loading                          |
+| Fetch Join                | `joinedload()`                        |
+| Batch Fetch와 유사한 방식 | `selectinload()`                      |
+| `CascadeType`             | `cascade`                             |
+| 영속성 컨텍스트           | `Session`                             |
+| Dirty Checking            | Unit of Work 기반 변경 감지           |
+| `flush()`                 | `Session.flush()`                     |
+
+여기서 가장 먼저 확실하게 이해해야 하는 개념이 있다.
+
+바로 `ForeignKey`와 `relationship()`의 차이다.
+
+---
+
+## 3. `ForeignKey`와 `relationship()`은 역할이 다르다
+
+다음과 같은 관계가 있다고 가정하자.
+
+```text
+User 1 ───── N Post
+```
+
+데이터베이스는 일반적으로 다음처럼 구성한다.
+
+```text
+users
+----------------
+id PK
+name
+
+posts
+----------------
+id PK
+title
+user_id FK
+```
+
+SQLAlchemy 모델을 먼저 관계 속성 없이 작성해 보자.
+
+```python
+from sqlalchemy import ForeignKey
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str]
+
+
+class Post(Base):
+    __tablename__ = "posts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str]
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id")
+    )
+```
+
+여기까지만 작성해도 데이터베이스 관점의 관계는 존재한다.
+
+그 이유는 다음 코드 때문이다.
+
+```python
+ForeignKey("users.id")
+```
+
+`posts.user_id`가 `users.id`를 참조한다는 것을 데이터베이스에 표현하고 있다.
+
+즉 `ForeignKey`의 역할은 다음과 같다.
+
+```text
+ForeignKey
+    ↓
+데이터베이스 테이블 사이의 관계 정의
+```
+
+하지만 현재 상태에서는 Python 코드에서 이런 식으로 사용할 수 없다.
+
+```python
+post.user
+```
+
+`Post` 클래스에 `user`라는 속성을 정의하지 않았기 때문이다.
+
+이때 사용하는 것이 `relationship()`이다.
+
+```python
+from sqlalchemy.orm import relationship
+
+
+class Post(Base):
+    __tablename__ = "posts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str]
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id")
+    )
+
+    user: Mapped["User"] = relationship()
+```
+
+이제 다음처럼 객체를 탐색할 수 있다.
+
+```python
+post.user
+post.user.name
+```
+
+정리하면 다음과 같다.
+
+```text
+ForeignKey
+    ↓
+DB 테이블 간 관계
+
+
+relationship()
+    ↓
+Python 객체 간 탐색 관계
+```
+
+이 차이를 확실히 이해해야 한다.
+
+---
+
+## 4. JPA와 비교하면 더 이해하기 쉽다
+
+JPA에서는 보통 다음처럼 작성한다.
+
+```java
+@ManyToOne(fetch = FetchType.LAZY)
+@JoinColumn(name = "user_id")
+private User user;
+```
+
+이 코드는 크게 두 가지 의미를 가지고 있다.
+
+```text
+@JoinColumn
+    ↓
+외래키 컬럼과 조인 정보
+
+@ManyToOne
+    ↓
+객체 간 연관관계
+```
+
+SQLAlchemy는 이 부분이 조금 더 분리되어 있다.
+
+```python
+user_id: Mapped[int] = mapped_column(
+    ForeignKey("users.id")
+)
+
+user: Mapped["User"] = relationship()
+```
+
+따라서 SQLAlchemy를 공부할 때는 항상 다음 두 가지를 별도로 생각하는 것이 좋다.
+
+1. **DB의 FK가 어디에 있는가?**
+2. **Python 객체에서는 어느 방향으로 탐색할 것인가?**
+
+---
+
+## 5. 단방향 관계
+
+객체 관계는 크게 단방향과 양방향으로 나눌 수 있다.
+
+먼저 다음 요구사항을 생각해 보자.
+
+> Post에서는 작성자인 User가 필요하지만, User 객체에서 Post 목록을 직접 탐색할 필요는 없다.
+
+그러면 다음처럼 작성할 수 있다.
+
+```python
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str]
+
+
+class Post(Base):
+    __tablename__ = "posts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str]
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id")
+    )
+
+    user: Mapped["User"] = relationship()
+```
+
+객체 탐색 방향은 다음과 같다.
+
+```text
+Post ─────→ User
+```
+
+따라서 다음 코드는 가능하다.
+
+```python
+post.user
+```
+
+하지만 다음 코드는 불가능하다.
+
+```python
+user.posts
+```
+
+`User`에 `posts`라는 relationship을 정의하지 않았기 때문이다.
+
+이것이 단방향 관계다.
+
+---
+
+## 6. `1:N` 방향으로만 탐색하는 단방향 관계도 가능하다
+
+반대 방향만 필요한 경우도 있다.
+
+예를 들어 다음 요구사항이 있다고 하자.
+
+> User에서 작성한 Post 목록은 조회해야 하지만 Post에서 User 객체를 탐색할 필요는 없다.
+
+다음처럼 정의할 수 있다.
+
+```python
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str]
+
+    posts: Mapped[list["Post"]] = relationship()
+
+
+class Post(Base):
+    __tablename__ = "posts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str]
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id")
+    )
+```
+
+이 경우 다음은 가능하다.
+
+```python
+user.posts
+```
+
+하지만 다음은 불가능하다.
+
+```python
+post.user
+```
+
+여기에서 중요한 점이 하나 있다.
+
+객체 탐색 방향이 `User → Post`라고 해서 FK가 User 테이블에 생기는 것은 아니다.
+
+DB 구조는 여전히 다음과 같다.
+
+```text
+users
+----------------
+id PK
+
+posts
+----------------
+id PK
+user_id FK
+```
+
+즉,
+
+> **객체 탐색 방향과 Foreign Key의 위치는 서로 다른 문제다.**
+
+이 부분은 반드시 구분해야 한다.
+
+---
+
+## 7. 양방향 관계
+
+이번에는 양쪽에서 모두 탐색해야 한다고 해보자.
+
+```text
+User
+ │
+ │ posts
+ ▼
+Post
+
+Post
+ │
+ │ user
+ ▼
+User
+```
+
+SQLAlchemy에서는 `back_populates`를 이용해서 두 relationship이 서로 연결된 관계라는 것을 표현할 수 있다.
+
+```python
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str]
+
+    posts: Mapped[list["Post"]] = relationship(
+        back_populates="user"
+    )
+
+
+class Post(Base):
+    __tablename__ = "posts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str]
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id")
+    )
+
+    user: Mapped["User"] = relationship(
+        back_populates="posts"
+    )
+```
+
+관계를 그림으로 표현하면 다음과 같다.
+
+```text
+User.posts
+    ↕
+Post.user
+```
+
+따라서 양쪽 방향 모두 탐색할 수 있다.
+
+```python
+user.posts
+```
+
+```python
+post.user
+```
+
+---
+
+## 8. `back_populates`의 의미
+
+`back_populates`는 상대방의 relationship 속성을 지정한다.
+
+```python
+class User(Base):
+    posts: Mapped[list["Post"]] = relationship(
+        back_populates="user"
+    )
+```
+
+여기서:
+
+```python
+back_populates="user"
+```
+
+는 `Post.user`를 의미한다.
+
+반대로:
+
+```python
+class Post(Base):
+    user: Mapped["User"] = relationship(
+        back_populates="posts"
+    )
+```
+
+여기서:
+
+```python
+back_populates="posts"
+```
+
+는 `User.posts`를 의미한다.
+
+즉 다음과 같이 연결된다.
+
+```text
+User.posts
+   │
+   │ back_populates
+   │
+Post.user
+```
+
+`back_populates`는 단순히 JOIN 조건을 만드는 옵션이라기보다, 두 ORM 속성이 서로 반대 방향의 동일한 관계라는 것을 SQLAlchemy에 명시하는 역할을 한다.
+
+---
+
+## 9. JPA의 `mappedBy`와 `back_populates`는 같은 개념이 아니다
+
+Spring/JPA 경험이 있다면 가장 조심해야 하는 부분이다.
+
+JPA에서는 다음처럼 작성한다.
+
+```java
+@Entity
+public class User {
+
+    @OneToMany(mappedBy = "user")
+    private List<Post> posts;
+}
+```
+
+```java
+@Entity
+public class Post {
+
+    @ManyToOne
+    @JoinColumn(name = "user_id")
+    private User user;
+}
+```
+
+여기서 `Post.user`가 일반적으로 연관관계의 주인이 된다.
+
+```text
+Post.user
+    ↓
+posts.user_id FK 관리
+```
+
+반대로:
+
+```java
+mappedBy = "user"
+```
+
+가 지정된 `User.posts`는 연관관계의 반대편이다.
+
+SQLAlchemy의 `back_populates`는 이 `mappedBy`와 정확하게 같은 의미가 아니다.
+
+SQLAlchemy에서는 다음처럼 이해하는 편이 좋다.
+
+```python
+class User(Base):
+    posts = relationship(back_populates="user")
+
+
+class Post(Base):
+    user_id = mapped_column(
+        ForeignKey("users.id")
+    )
+
+    user = relationship(back_populates="posts")
+```
+
+핵심은 다음과 같다.
+
+```text
+JPA mappedBy
+    ↓
+이 필드는 FK를 관리하는 연관관계의 주인이 아니라는 의미가 포함됨
+
+
+SQLAlchemy back_populates
+    ↓
+두 relationship 속성이 서로 같은 관계의 반대 방향이라는 것을 연결
+```
+
+따라서 `mappedBy == back_populates`라고 외우면 오히려 나중에 혼란이 생길 수 있다.
+
+---
+
+## 10. SQLAlchemy에서는 "연관관계의 주인"을 어떻게 생각해야 할까?
+
+JPA를 공부하면 자연스럽게 다음 질문을 하게 된다.
+
+> 연관관계의 주인은 어느 쪽인가?
+
+SQLAlchemy에서는 이 질문보다 먼저 다음을 보는 것이 이해하기 쉽다.
+
+> **실제 Foreign Key가 어느 테이블에 존재하는가?**
+
+예를 들어:
+
+```text
+User 1 : N Post
+```
+
+관계라면 보통 FK는 `posts`에 존재한다.
+
+```text
+posts.user_id
+```
+
+SQLAlchemy에서는 이를 명시적으로 작성한다.
+
+```python
+class Post(Base):
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id")
+    )
+```
+
+그래서 SQLAlchemy에서는 JPA의 연관관계 주인 개념을 그대로 대입하기보다는 다음 두 가지를 생각하면 된다.
+
+```text
+1. FK가 어느 테이블에 존재하는가?
+2. Python 객체는 어느 방향으로 탐색할 필요가 있는가?
+```
+
+이렇게 생각하면 관계 설계가 훨씬 단순해진다.
+
+---
+
+## 11. 양방향 관계가 항상 좋은 것은 아니다
+
+`User 1 : N Post` 관계가 있다고 해서 무조건 양방향으로 만들 필요는 없다.
+
+예를 들어 실제 코드에서 필요한 것이 다음뿐이라면:
+
+```python
+post.user
+```
+
+굳이 다음까지 만들 필요는 없다.
+
+```python
+user.posts
+```
+
+즉 다음처럼 단방향으로 충분할 수 있다.
+
+```python
+class Post(Base):
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id")
+    )
+
+    user: Mapped["User"] = relationship()
+```
+
+양방향 관계를 필요 이상으로 많이 만들면 다음 문제가 생길 수 있다.
+
+- 객체 그래프가 불필요하게 커진다.
+- 어느 지점에서 추가 SQL이 발생하는지 파악하기 어려워진다.
+- Lazy Loading의 범위가 넓어진다.
+- API 직렬화 과정에서 순환 구조를 만들기 쉬워진다.
+- 도메인 객체 사이의 의존성이 커진다.
+- Aggregate 경계가 흐려질 수 있다.
+
+따라서 관계를 설정할 때는 다음 질문을 먼저 하는 것이 좋다.
+
+> 정말 양쪽 방향의 객체 탐색이 필요한가?
+
+필요한 방향만 정의하는 것이 가장 단순한 설계다.
+
+---
+
+## 12. `N:1` 관계
+
+가장 흔하게 볼 수 있는 관계다.
+
+```text
+User 1 ───── N Post
+```
+
+Post 여러 개가 하나의 User를 참조한다.
+
+```python
+class Post(Base):
+    __tablename__ = "posts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str]
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id")
+    )
+
+    user: Mapped["User"] = relationship()
+```
+
+DB 관점에서는:
+
+```text
+posts.user_id
+    ↓
+users.id
+```
+
+객체 관점에서는:
+
+```text
+Post.user
+```
+
+가 된다.
+
+Spring/JPA로 표현하면 대략 다음과 비슷하다.
+
+```java
+@ManyToOne(fetch = FetchType.LAZY)
+@JoinColumn(name = "user_id")
+private User user;
+```
+
+---
+
+## 13. `1:N` 관계
+
+User에서 자신이 작성한 Post 목록까지 탐색하고 싶다면 다음과 같이 정의할 수 있다.
+
+```python
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str]
+
+    posts: Mapped[list["Post"]] = relationship(
+        back_populates="user"
+    )
+
+
+class Post(Base):
+    __tablename__ = "posts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str]
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id")
+    )
+
+    user: Mapped["User"] = relationship(
+        back_populates="posts"
+    )
+```
+
+Python 타입에서도 관계의 cardinality가 드러난다.
+
+```python
+posts: Mapped[list["Post"]]
+```
+
+는 여러 개의 Post를 의미하고:
+
+```python
+user: Mapped["User"]
+```
+
+는 하나의 User를 의미한다.
+
+SQLAlchemy 2.x 스타일에서는 이런 타입 힌트를 적극적으로 사용하는 것이 좋다.
+
+---
+
+## 14. `1:1` 관계
+
+다음과 같은 관계를 생각해 보자.
+
+```text
+User 1 ───── 1 UserProfile
+```
+
+예를 들면 한 User가 하나의 Profile만 가질 수 있다고 하자.
+
+```python
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    profile: Mapped["UserProfile | None"] = relationship(
+        back_populates="user"
+    )
+
+
+class UserProfile(Base):
+    __tablename__ = "user_profiles"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id"),
+        unique=True,
+    )
+
+    user: Mapped["User"] = relationship(
+        back_populates="profile"
+    )
+```
+
+여기서 특히 중요한 것은 다음이다.
+
+```python
+unique=True
+```
+
+ORM 코드에서 `profile`을 단일 객체로 표현했다고 해서 DB가 자동으로 `1:1` 무결성을 보장하는 것은 아니다.
+
+만약 `user_id`에 UNIQUE 제약이 없다면 이런 데이터가 들어갈 수 있다.
+
+```text
+id | user_id
+---|--------
+1  | 10
+2  | 10
+3  | 10
+```
+
+그러면 User 하나에 UserProfile 여러 개가 연결될 수 있다.
+
+따라서 진짜 `1:1` 관계를 만들고 싶다면 데이터베이스 제약조건도 함께 설계해야 한다.
+
+> ORM의 객체 관계와 DB 무결성 제약은 별개의 문제다.
+
+---
+
+## 15. Optional 관계와 Nullable도 구분해야 한다
+
+다음 타입을 보자.
+
+```python
+user: Mapped["User"]
+```
+
+이 관계는 객체 관점에서 User가 반드시 존재한다는 의도를 표현한다.
+
+FK도 보통 다음처럼 NOT NULL로 설계한다.
+
+```python
+user_id: Mapped[int] = mapped_column(
+    ForeignKey("users.id"),
+    nullable=False,
+)
+```
+
+반대로 관계가 선택적이라면 다음처럼 표현할 수 있다.
+
+```python
+user_id: Mapped[int | None] = mapped_column(
+    ForeignKey("users.id"),
+    nullable=True,
+)
+
+user: Mapped["User | None"] = relationship()
+```
+
+이런 타입 표현을 DB의 nullable 정책과 일치시키는 것이 좋다.
+
+```text
+Python Type
+    ↕
+ORM Mapping
+    ↕
+DB Constraint
+```
+
+세 가지가 서로 다른 의미를 갖고 있으면 코드의 의도를 이해하기 어려워진다.
+
+---
+
+## 16. `N:M` 관계
+
+Post 하나에 Tag 여러 개가 붙고, Tag 하나도 여러 Post에서 사용할 수 있다고 하자.
+
+```text
+Post N ───── M Tag
+```
+
+관계형 데이터베이스에서는 중간 테이블이 필요하다.
+
+```text
+posts
+----------------
+id PK
+
+tags
+----------------
+id PK
+
+post_tags
+----------------
+post_id FK
+tag_id FK
+```
+
+단순 연결만 필요한 경우 SQLAlchemy에서는 `secondary`를 사용할 수 있다.
+
+```python
+from sqlalchemy import Column, ForeignKey, Table
+
+
+post_tag_table = Table(
+    "post_tags",
+    Base.metadata,
+    Column(
+        "post_id",
+        ForeignKey("posts.id"),
+        primary_key=True,
+    ),
+    Column(
+        "tag_id",
+        ForeignKey("tags.id"),
+        primary_key=True,
+    ),
+)
+```
+
+그리고 다음처럼 연결한다.
+
+```python
+class Post(Base):
+    __tablename__ = "posts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    tags: Mapped[list["Tag"]] = relationship(
+        secondary=post_tag_table,
+        back_populates="posts",
+    )
+
+
+class Tag(Base):
+    __tablename__ = "tags"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    posts: Mapped[list["Post"]] = relationship(
+        secondary=post_tag_table,
+        back_populates="tags",
+    )
+```
+
+이제 다음처럼 사용할 수 있다.
+
+```python
+post.tags
+```
+
+```python
+tag.posts
+```
+
+---
+
+## 17. 실무에서는 `N:M` 중간 테이블을 객체로 승격하는 경우가 많다
+
+처음에는 단순한 중간 테이블이었다고 해보자.
+
+```text
+post_tags
+----------------
+post_id
+tag_id
+```
+
+그런데 요구사항이 추가되면서 다음 컬럼이 생길 수 있다.
+
+```text
+post_tags
+----------------
+post_id
+tag_id
+created_at
+display_order
+created_by
+```
+
+이제 `post_tags`는 단순한 연결 테이블이라고 보기 어렵다.
+
+관계 자체가 데이터를 가지기 때문이다.
+
+이럴 때는 다음과 같이 별도의 ORM 모델로 만드는 것이 좋다.
+
+```text
+Post
+  1
+  │
+  N
+PostTag
+  N
+  │
+  1
+ Tag
+```
+
+예시는 다음과 같다.
+
+```python
+class PostTag(Base):
+    __tablename__ = "post_tags"
+
+    post_id: Mapped[int] = mapped_column(
+        ForeignKey("posts.id"),
+        primary_key=True,
+    )
+
+    tag_id: Mapped[int] = mapped_column(
+        ForeignKey("tags.id"),
+        primary_key=True,
+    )
+
+    display_order: Mapped[int]
+
+    post: Mapped["Post"] = relationship(
+        back_populates="post_tags"
+    )
+
+    tag: Mapped["Tag"] = relationship(
+        back_populates="post_tags"
+    )
+```
+
+Post는 다음과 같이 가진다.
+
+```python
+class Post(Base):
+    __tablename__ = "posts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    post_tags: Mapped[list["PostTag"]] = relationship(
+        back_populates="post"
+    )
+```
+
+Tag도 동일하다.
+
+```python
+class Tag(Base):
+    __tablename__ = "tags"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    post_tags: Mapped[list["PostTag"]] = relationship(
+        back_populates="tag"
+    )
+```
+
+이 방식을 SQLAlchemy에서는 **Association Object Pattern**이라고 부른다.
+
+JPA에서도 `@ManyToMany`를 직접 사용하는 것보다 `PostTag` 같은 연결 Entity를 명시적으로 만드는 방식과 비슷한 접근이다.
+
+실무에서는 관계 자체에 비즈니스 속성이 추가될 가능성이 높다면 처음부터 연결 객체를 두는 것을 검토할 만하다.
+
+---
+
+## 18. `backref`보다 `back_populates`를 우선해서 사용하자
+
+SQLAlchemy 관련 예전 코드를 검색하면 다음과 같은 코드를 볼 수 있다.
+
+```python
+relationship(backref="posts")
+```
+
+`backref`를 사용하면 반대편 relationship을 자동으로 만들어 준다.
+
+하지만 현대적인 SQLAlchemy 2.x 코드에서는 명시적인 `back_populates`를 사용하는 편이 이해하기 쉽다.
+
+```python
+class User(Base):
+    posts: Mapped[list["Post"]] = relationship(
+        back_populates="user"
+    )
+
+
+class Post(Base):
+    user: Mapped["User"] = relationship(
+        back_populates="posts"
+    )
+```
+
+이렇게 하면 양쪽 모델에서 어떤 관계를 가지고 있는지 코드만 보고 확인할 수 있다.
+
+타입 힌트와도 자연스럽게 맞는다.
+
+---
+
+## 19. 관계 설정보다 더 중요한 것: 데이터를 언제 가져오는가
+
+ORM 관계를 정의했다고 끝이 아니다.
+
+실무에서는 **연관 객체를 언제, 어떤 SQL로 가져오는가**가 훨씬 중요할 수 있다.
+
+다음 코드가 있다고 해보자.
+
+```python
+users = ...
+```
+
+User가 100명 조회됐다고 하자.
+
+그리고 다음처럼 사용한다.
+
+```python
+for user in users:
+    print(user.posts)
+```
+
+만약 `posts`가 Lazy Loading으로 동작한다면 다음과 같은 SQL이 발생할 수 있다.
+
+```sql
+SELECT *
+FROM users;
+```
+
+그 다음 User마다:
+
+```sql
+SELECT *
+FROM posts
+WHERE user_id = 1;
+```
+
+```sql
+SELECT *
+FROM posts
+WHERE user_id = 2;
+```
+
+```sql
+SELECT *
+FROM posts
+WHERE user_id = 3;
+```
+
+이런 식으로 계속 조회된다.
+
+결과적으로:
+
+```text
+User 조회       1번
+Post 추가 조회 100번
+
+총 101번
+```
+
+이 문제가 바로 익숙한 **N+1 문제**다.
+
+JPA에서 발생하던 N+1 문제는 SQLAlchemy에서도 똑같이 주의해야 한다.
+
+---
+
+## 20. Lazy Loading
+
+Lazy Loading은 관계 속성을 실제로 접근하는 시점에 데이터를 가져오는 방식이다.
+
+예를 들어:
+
+```python
+user.posts
+```
+
+를 호출하는 순간 아직 `posts`가 로딩되지 않았다면 추가 SQL이 실행될 수 있다.
+
+개념적으로 JPA의 다음 설정과 비슷하다.
+
+```java
+FetchType.LAZY
+```
+
+장점은 당장 필요하지 않은 연관 객체를 불필요하게 조회하지 않는다는 것이다.
+
+하지만 반복문이나 예상하지 못한 코드에서 관계를 접근하면 N+1 문제를 만들기 쉽다.
+
+---
+
+## 21. `joinedload()`
+
+관련 데이터를 JOIN으로 함께 가져오고 싶다면 `joinedload()`를 사용할 수 있다.
+
+```python
+from sqlalchemy import select
+from sqlalchemy.orm import joinedload
+
+
+stmt = (
+    select(Post)
+    .options(
+        joinedload(Post.user)
+    )
+)
+```
+
+개념적으로 다음과 비슷한 SQL을 기대할 수 있다.
+
+```sql
+SELECT ...
+FROM posts
+LEFT OUTER JOIN users
+    ON posts.user_id = users.id;
+```
+
+JPA의 Fetch Join을 떠올리면 이해하기 쉽다.
+
+특히 다음과 같은 단일 객체 관계에서 유용할 수 있다.
+
+```text
+N:1
+1:1
+```
+
+예를 들면:
+
+```text
+Post → User
+Order → Member
+Comment → Author
+```
+
+같은 관계다.
+
+---
+
+## 22. `selectinload()`
+
+컬렉션 관계에서는 `selectinload()`가 유용한 경우가 많다.
+
+```python
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+
+
+stmt = (
+    select(User)
+    .options(
+        selectinload(User.posts)
+    )
+)
+```
+
+대략 다음과 같은 방식으로 SQL이 실행된다.
+
+첫 번째 쿼리:
+
+```sql
+SELECT *
+FROM users;
+```
+
+두 번째 쿼리:
+
+```sql
+SELECT *
+FROM posts
+WHERE user_id IN (1, 2, 3, 4, 5, ...);
+```
+
+즉 User가 100명이어도 User마다 Post를 하나씩 조회하지 않고 필요한 User ID들을 모아서 한 번에 조회한다.
+
+```text
+1번: User 조회
+1번: Post 일괄 조회
+```
+
+이런 방식은 특히 다음 관계에서 자주 검토할 수 있다.
+
+```text
+1:N
+N:M
+```
+
+---
+
+## 23. `joinedload()`와 `selectinload()`는 언제 사용할까?
+
+정답이 하나로 고정되어 있는 것은 아니다.
+
+하지만 처음 학습할 때는 다음 정도를 출발점으로 생각할 수 있다.
+
+| 관계  | 우선 검토할 전략 |
+| ----- | ---------------- |
+| `N:1` | `joinedload()`   |
+| `1:1` | `joinedload()`   |
+| `1:N` | `selectinload()` |
+| `N:M` | `selectinload()` |
+
+왜 컬렉션에 무조건 JOIN을 사용하지 않을까?
+
+예를 들어 User 100명마다 Post가 100개 있다고 해보자.
+
+```text
+User 100
+   ×
+Post 100
+
+→ 결과 row가 크게 증가할 수 있음
+```
+
+JOIN은 필요한 데이터를 한 번에 가져올 수 있지만 컬렉션 크기가 커질수록 결과 row가 크게 팽창할 수 있다.
+
+따라서 컬렉션 관계에서는 `selectinload()`가 더 효율적인 경우가 많다.
+
+단, 실제 선택은 다음을 보고 결정해야 한다.
+
+- 조회되는 부모 Row 수
+- 자식 Row 수
+- 관계의 cardinality
+- 실제 API에서 필요한 데이터
+- 쿼리 실행 횟수
+- JOIN으로 인한 Row 증가량
+
+결국 실행 SQL을 직접 확인하는 습관이 중요하다.
+
+---
+
+## 24. Entity에 항상 Eager Loading을 박아 두는 것은 피하자
+
+다음처럼 관계 자체에 무조건 JOIN 로딩을 지정하는 접근은 신중해야 한다.
+
+```python
+posts: Mapped[list["Post"]] = relationship(
+    lazy="joined"
+)
+```
+
+왜냐하면 API마다 필요한 데이터가 다르기 때문이다.
+
+예를 들어:
+
+```text
+GET /users
+```
+
+에서는 User 기본 정보만 필요할 수 있다.
+
+반면:
+
+```text
+GET /users/{id}
+```
+
+에서는 Post 목록까지 필요할 수 있다.
+
+그런데 relationship 자체에 항상 `joined`를 지정하면 User만 필요한 API에서도 Post JOIN이 발생할 수 있다.
+
+따라서 조회 요구사항이 다른 애플리케이션에서는 Repository나 Query 코드에서 필요한 로딩 전략을 명시하는 방식이 더 유연하다.
+
+```python
+stmt = (
+    select(User)
+    .where(User.id == user_id)
+    .options(
+        selectinload(User.posts)
+    )
+)
+```
+
+즉:
+
+```text
+관계의 존재
+    ↓
+ORM Model에서 정의
+
+
+어떤 데이터를 이번 조회에서 가져올 것인가
+    ↓
+Query에서 결정
+```
+
+이렇게 역할을 분리하면 조회 의도가 더 선명해진다.
+
+---
+
+## 25. FastAPI + Async SQLAlchemy에서는 Lazy Loading을 더 조심해야 한다
+
+FastAPI에서는 비동기 SQLAlchemy를 사용하는 경우가 많다.
+
+```python
+from sqlalchemy.ext.asyncio import AsyncSession
+```
+
+예를 들어:
+
+```python
+user = await session.get(User, user_id)
+```
+
+이후에 다음 코드를 실행한다고 하자.
+
+```python
+user.posts
+```
+
+`posts`가 아직 로딩되지 않았다면 데이터베이스 조회가 필요할 수 있다.
+
+즉 평범한 Python 속성 접근처럼 보이지만 내부적으로는 I/O가 발생하려는 상황이다.
+
+```text
+user.posts
+    ↓
+DB Query 필요
+    ↓
+I/O 발생
+```
+
+비동기 환경에서는 이렇게 **암묵적으로 I/O가 발생하는 코드를 특히 조심해야 한다.**
+
+따라서 필요한 관계를 쿼리 단계에서 명시적으로 로딩하는 방식을 적극적으로 사용하는 편이 좋다.
+
+```python
+stmt = (
+    select(User)
+    .where(User.id == user_id)
+    .options(
+        selectinload(User.posts)
+    )
+)
+
+result = await session.execute(stmt)
+
+user = result.scalar_one()
+```
+
+이렇게 하면 `User`를 가져올 때 어떤 관계까지 필요한지 코드에서 명확하게 드러난다.
+
+---
+
+## 26. `Session`을 같이 이해해야 관계 동작이 보인다
+
+JPA에서 연관관계를 제대로 이해하려면 결국 다음 개념까지 이어진다.
+
+```text
+영속성 컨텍스트
+Dirty Checking
+Flush
+Cascade
+Lazy Loading
+```
+
+SQLAlchemy도 비슷하다.
+
+핵심 객체는 `Session`이다.
+
+동기 방식에서는:
+
+```python
+Session
+```
+
+비동기 방식에서는:
+
+```python
+AsyncSession
+```
+
+을 사용한다.
+
+예를 들어:
+
+```python
+post = Post(
+    title="SQLAlchemy 관계 정리",
+    user=user,
+)
+
+session.add(post)
+
+await session.commit()
+```
+
+SQLAlchemy Session은 ORM 객체의 상태를 추적하고 transaction과 flush를 관리한다.
+
+개념적으로 보면 다음과 같다.
+
+```text
+Python Object
+    ↓
+Session
+    ↓
+Unit of Work
+    ↓
+INSERT / UPDATE / DELETE
+    ↓
+Database
+```
+
+JPA의 Persistence Context와 완전히 같은 구현은 아니지만, Spring/JPA 경험이 있다면 비슷한 역할을 하는 핵심 컴포넌트라고 이해하면 된다.
+
+---
+
+## 27. Cascade
+
+부모 객체와 자식 객체의 생명주기가 강하게 묶여 있다면 Cascade를 검토할 수 있다.
+
+예를 들어 다음 관계를 생각해 보자.
+
+```text
+Order
+  │
+  └── OrderItem
+```
+
+Order가 삭제되면 그 Order에 속한 OrderItem도 함께 삭제되어야 한다고 하자.
+
+```python
+class Order(Base):
+    __tablename__ = "orders"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    items: Mapped[list["OrderItem"]] = relationship(
+        back_populates="order",
+        cascade="all, delete-orphan",
+    )
+```
+
+JPA에서는 다음과 비슷한 의도로 사용할 수 있다.
+
+```java
+@OneToMany(
+    mappedBy = "order",
+    cascade = CascadeType.ALL,
+    orphanRemoval = true
+)
+private List<OrderItem> items;
+```
+
+특히:
+
+```text
+delete-orphan
+```
+
+은 부모 collection에서 제거되어 더 이상 소유되지 않는 자식 객체를 삭제 대상으로 처리하는 데 사용된다.
+
+하지만 Cascade는 편하다는 이유만으로 모든 관계에 지정하면 안 된다.
+
+관계의 생명주기가 정말로 동일한지 확인해야 한다.
+
+---
+
+## 28. ORM Cascade와 DB `ON DELETE CASCADE`는 다르다
+
+다음 두 코드는 비슷해 보이지만 동작하는 레이어가 다르다.
+
+SQLAlchemy ORM:
+
+```python
+relationship(
+    cascade="all, delete-orphan"
+)
+```
+
+Database Foreign Key:
+
+```python
+ForeignKey(
+    "orders.id",
+    ondelete="CASCADE",
+)
+```
+
+둘의 차이는 다음과 같다.
+
+```text
+ORM Cascade
+    ↓
+SQLAlchemy Session / ORM 레이어에서 동작
+
+
+ON DELETE CASCADE
+    ↓
+Database 레이어에서 동작
+```
+
+DB에서 직접 DELETE가 실행되더라도 DB Cascade는 동작할 수 있다.
+
+반면 ORM Cascade는 SQLAlchemy가 객체의 삭제 과정을 관리하는 상황에서 의미가 있다.
+
+따라서 둘을 동일한 개념으로 생각하면 안 된다.
+
+---
+
+## 29. ORM Model과 API Response Model도 분리해서 생각하자
+
+양방향 ORM 관계를 사용하면 객체 구조가 다음처럼 이어질 수 있다.
+
+```text
+User
+ └── posts
+      └── Post
+           └── user
+                └── User
+                     └── posts
+                          ...
+```
+
+이 구조를 API Response까지 그대로 노출하는 것은 좋지 않다.
+
+예를 들어 ORM은 다음처럼 양방향이어도:
+
+```python
+class User(Base):
+    posts = relationship(
+        back_populates="user"
+    )
+
+
+class Post(Base):
+    user = relationship(
+        back_populates="posts"
+    )
+```
+
+API 응답 모델은 필요한 데이터만 정의해야 한다.
+
+```python
+from pydantic import BaseModel
+
+
+class UserResponse(BaseModel):
+    id: int
+    name: str
+```
+
+상세 API에서만 Post가 필요하다면 별도의 응답 모델을 만든다.
+
+```python
+class PostSummaryResponse(BaseModel):
+    id: int
+    title: str
+
+
+class UserDetailResponse(BaseModel):
+    id: int
+    name: str
+    posts: list[PostSummaryResponse]
+```
+
+여기서 `PostSummaryResponse` 안에 다시 User 전체를 넣을 필요는 없다.
+
+즉 다음 두 가지는 서로 분리해야 한다.
+
+```text
+ORM Relationship
+    ↓
+도메인/영속 객체를 어떻게 탐색할 것인가
+
+
+API Response
+    ↓
+클라이언트에게 어떤 데이터를 노출할 것인가
+```
+
+ORM 관계가 양방향이라고 해서 JSON도 양방향이어야 하는 것은 아니다.
+
+---
+
+## 30. 객체 관계와 Aggregate 경계를 혼동하지 말자
+
+DDD를 적용한다면 한 단계 더 생각해야 한다.
+
+ORM에서 관계를 설정할 수 있다는 이유만으로 모든 Entity를 객체 reference로 연결할 필요는 없다.
+
+예를 들어 Aggregate가 다음처럼 나누어져 있다고 하자.
+
+```text
+Order Aggregate
+----------------
+Order
+OrderItem
+
+
+Member Aggregate
+----------------
+Member
+```
+
+Order가 Member와 관계를 가진다고 해서 반드시 ORM에 다음 관계가 필요한 것은 아니다.
+
+```python
+order.member
+```
+
+경우에 따라서는 ID만 가지는 것이 더 적절할 수 있다.
+
+```python
+member_id: Mapped[int] = mapped_column()
+```
+
+Aggregate 경계를 넘는 객체 관계를 지나치게 많이 만들면:
+
+- Aggregate 사이의 결합도가 높아지고
+- 객체 그래프가 커지고
+- Lazy Loading이 예상하지 못한 곳에서 발생하고
+- transaction 경계를 이해하기 어려워질 수 있다.
+
+따라서 DDD 관점에서는 다음을 구분해야 한다.
+
+```text
+DB Foreign Key가 존재한다
+≠
+반드시 ORM relationship이 필요하다
+≠
+반드시 도메인 객체 reference가 필요하다
+```
+
+이 세 가지는 서로 다른 설계 결정이다.
+
+---
+
+## 31. 관계를 설계할 때 추천하는 사고 순서
+
+Spring/JPA에서는 관계를 보면 바로 다음을 생각하기 쉽다.
+
+```text
+@OneToMany인가?
+@ManyToOne인가?
+mappedBy는 어디에 둘까?
+연관관계의 주인은 어디일까?
+```
+
+SQLAlchemy에서는 다음 순서로 접근하면 이해하기 쉽다.
+
+### 1단계. DB의 cardinality를 확인한다
+
+예:
+
+```text
+User 1 : N Post
+```
+
+---
+
+### 2단계. FK가 어디에 있어야 하는지 결정한다
+
+```text
+posts.user_id
+```
+
+---
+
+### 3단계. DB 제약조건을 결정한다
+
+예를 들어:
+
+```text
+NOT NULL
+UNIQUE
+ON DELETE
+INDEX
+```
+
+등을 결정한다.
+
+---
+
+### 4단계. Python 객체에서 필요한 탐색 방향을 결정한다
+
+다음만 필요한지:
+
+```python
+post.user
+```
+
+아니면 다음도 필요한지:
+
+```python
+user.posts
+```
+
+판단한다.
+
+---
+
+### 5단계. 양방향이면 `back_populates`를 연결한다
+
+```python
+User.posts
+    ↕
+Post.user
+```
+
+---
+
+### 6단계. 생명주기를 확인한다
+
+부모와 자식이 동일한 생명주기를 가진다면 Cascade나 `delete-orphan`을 검토한다.
+
+---
+
+### 7단계. 조회 전략을 결정한다
+
+```text
+Lazy Loading
+joinedload()
+selectinload()
+```
+
+어떤 전략이 해당 Use Case에 적합한지 결정한다.
+
+---
+
+### 8단계. API 응답 형태를 별도로 설계한다
+
+ORM 관계를 그대로 Response에 노출하지 말고 필요한 데이터만 Pydantic 모델로 만든다.
+
+이 순서로 접근하면 객체 관계를 애너테이션이나 옵션 중심이 아니라 **데이터 모델과 Use Case 중심으로 설계할 수 있다.**
+
+---
+
+## 32. 전체 예제로 다시 정리해 보자
+
+가장 기본적인 `User 1 : N Post` 양방향 관계를 하나의 코드로 정리하면 다음과 같다.
+
+```python
+from __future__ import annotations
+
+from sqlalchemy import ForeignKey
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    mapped_column,
+    relationship,
+)
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(
+        primary_key=True
+    )
+
+    name: Mapped[str]
+
+    posts: Mapped[list[Post]] = relationship(
+        back_populates="user"
+    )
+
+
+class Post(Base):
+    __tablename__ = "posts"
+
+    id: Mapped[int] = mapped_column(
+        primary_key=True
+    )
+
+    title: Mapped[str]
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id"),
+        nullable=False,
+    )
+
+    user: Mapped[User] = relationship(
+        back_populates="posts"
+    )
+```
+
+이 모델을 읽을 때는 다음 순서로 해석하면 된다.
+
+### 데이터베이스 관계
+
+```python
+ForeignKey("users.id")
+```
+
+때문에:
+
+```text
+posts.user_id
+    ↓
+users.id
+```
+
+관계가 만들어진다.
+
+### Post에서 User 탐색
+
+```python
+Post.user
+```
+
+가 있기 때문에:
+
+```python
+post.user
+```
+
+로 접근할 수 있다.
+
+### User에서 Post 탐색
+
+```python
+User.posts
+```
+
+가 있기 때문에:
+
+```python
+user.posts
+```
+
+로 접근할 수 있다.
+
+### 양방향 연결
+
+```python
+back_populates
+```
+
+를 사용해:
+
+```text
+User.posts ↔ Post.user
+```
+
+가 서로 같은 관계라는 것을 표현한다.
+
+---
+
+## 33. Repository에서 조회 전략까지 명시해 보자
+
+상세 User와 Post 목록을 같이 조회한다고 하자.
+
+비동기 SQLAlchemy를 사용하면 다음처럼 작성할 수 있다.
+
+```python
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+
+class UserRepository:
+
+    def __init__(
+        self,
+        session: AsyncSession,
+    ) -> None:
+        self.session = session
+
+    async def find_by_id_with_posts(
+        self,
+        user_id: int,
+    ) -> User | None:
+
+        stmt = (
+            select(User)
+            .where(User.id == user_id)
+            .options(
+                selectinload(User.posts)
+            )
+        )
+
+        result = await self.session.execute(stmt)
+
+        return result.scalar_one_or_none()
+```
+
+여기서 중요한 것은 메서드 이름에도 조회 의도를 드러냈다는 점이다.
+
+```python
+find_by_id_with_posts
+```
+
+단순 조회:
+
+```python
+find_by_id
+```
+
+와 Post까지 필요한 조회:
+
+```python
+find_by_id_with_posts
+```
+
+를 구분하면 어떤 연관 데이터를 가져오는지 명확해진다.
+
+JPA에서 Fetch Join 전용 Repository Query를 따로 만드는 것과 비슷한 접근이다.
+
+---
+
+## 34. 실무에서 자주 하는 실수
+
+### 실수 1. FK와 `relationship()`을 같은 것으로 생각한다
+
+잘못된 이해:
+
+```text
+relationship()이 DB FK를 만든다.
+```
+
+올바른 이해:
+
+```text
+ForeignKey
+→ DB 관계
+
+relationship()
+→ 객체 탐색 관계
+```
+
+---
+
+### 실수 2. 모든 관계를 양방향으로 만든다
+
+DB에 관계가 있다는 이유만으로:
+
+```python
+user.posts
+post.user
+```
+
+를 항상 둘 다 만들 필요는 없다.
+
+실제 Use Case에서 필요한 탐색 방향을 기준으로 결정한다.
+
+---
+
+### 실수 3. `mappedBy`와 `back_populates`를 같은 개념으로 외운다
+
+둘은 비슷하게 보이지만 역할이 정확히 같지 않다.
+
+`back_populates`는 두 relationship 속성을 명시적으로 연결하는 개념으로 이해하는 편이 안전하다.
+
+---
+
+### 실수 4. ORM 관계를 API Response에 그대로 노출한다
+
+양방향 객체 그래프는 Response 구조와 분리해야 한다.
+
+```text
+ORM Model
+≠
+API Response Model
+```
+
+---
+
+### 실수 5. Lazy Loading을 아무 생각 없이 사용한다
+
+특히:
+
+```python
+for user in users:
+    user.posts
+```
+
+같은 코드는 N+1을 만들 수 있다.
+
+실제 SQL을 확인하고 `selectinload()`나 `joinedload()`를 적절히 사용해야 한다.
+
+---
+
+### 실수 6. Async 환경에서 암묵적인 Lazy Loading을 기대한다
+
+`AsyncSession`을 사용할 때는 단순 속성 접근이 DB I/O로 이어지는 상황을 특히 주의해야 한다.
+
+필요한 관계는 쿼리 시점에 명시적으로 로딩하는 방식을 우선 검토하는 것이 좋다.
+
+---
+
+### 실수 7. Cascade를 편하다는 이유로 전부 적용한다
+
+Cascade는 객체의 생명주기와 관련된 설정이다.
+
+```text
+부모가 사라지면 자식도 반드시 사라져야 하는가?
+```
+
+같은 질문을 먼저 해야 한다.
+
+---
+
+## 35. Spring/JPA 개발자가 기억하면 좋은 핵심 비교
+
+가장 핵심적인 내용을 다시 압축하면 다음과 같다.
+
+```text
+JPA
+--------------------------------
+
+@ManyToOne
+@OneToMany
+@JoinColumn
+mappedBy
+FetchType
+CascadeType
+Persistence Context
+
+
+SQLAlchemy
+--------------------------------
+
+ForeignKey
+relationship()
+back_populates
+joinedload()
+selectinload()
+cascade
+Session
+```
+
+특히 다음 네 가지를 정확히 구분하는 것이 중요하다.
+
+```text
+1. ForeignKey
+   → DB 관계
+
+2. relationship()
+   → Python 객체 탐색 관계
+
+3. back_populates
+   → 양방향 relationship 연결
+
+4. Loading Strategy
+   → 관계 데이터를 언제, 어떤 SQL로 조회할 것인가
+```
+
+여기에 다음 개념이 추가된다.
+
+```text
+5. Session
+   → ORM 객체 상태와 transaction 관리
+
+6. Cascade
+   → 관계 객체의 생명주기 전파
+```
+
+---
+
+## 36. 최종 정리
+
+SQLAlchemy의 관계는 처음 보면 JPA와 비슷해 보인다.
+
+하지만 단순히 다음처럼 치환해서 외우면 한계가 있다.
+
+```text
+@ManyToOne = relationship
+@OneToMany = relationship
+mappedBy = back_populates
+```
+
+이런 방식보다는 관계를 구성하는 요소를 분리해서 이해하는 것이 중요하다.
+
+전체 구조를 정리하면 다음과 같다.
+
+```text
+Database
+   │
+   │ ForeignKey
+   ▼
+SQLAlchemy ORM Model
+   │
+   ├── relationship()
+   │       │
+   │       └── Python 객체 탐색
+   │
+   ├── back_populates
+   │       │
+   │       └── 양방향 관계 연결
+   │
+   ├── Loading Strategy
+   │       │
+   │       ├── Lazy
+   │       ├── joinedload()
+   │       └── selectinload()
+   │
+   └── Cascade
+           │
+           └── 객체 생명주기 관리
+```
+
+그리고 이 모든 객체는 결국 `Session`을 통해 데이터베이스와 상호작용한다.
+
+```text
+ORM Object
+    ↓
+Session
+    ↓
+Unit of Work
+    ↓
+SQL
+    ↓
+Database
+```
+
+Spring/JPA 경험이 있다면 SQLAlchemy가 완전히 새로운 ORM처럼 느껴질 수 있지만, 실제로는 이미 알고 있는 개념이 많다.
+
+다만 **JPA의 용어를 SQLAlchemy에 그대로 대입하기보다, DB 관계와 객체 관계를 분리해서 바라보는 사고방식으로 전환하는 것이 중요하다.**
+
+---
+
+## 37. 다음으로 공부하면 좋은 내용
+
+객체 관계를 이해했다면 다음 순서로 공부하는 것을 추천한다.
+
+1. `Session`과 `AsyncSession`
+2. SQLAlchemy 객체 상태
+   - transient
+   - pending
+   - persistent
+   - detached
+3. `flush()`와 `commit()`의 차이
+4. Unit of Work
+5. Lazy Loading
+6. `joinedload()`
+7. `selectinload()`
+8. N+1 문제
+9. Cascade와 `delete-orphan`
+10. DB `ON DELETE CASCADE`
+11. Transaction 관리
+12. FastAPI Dependency와 `AsyncSession` 생명주기
+13. Pydantic Schema와 ORM Model 분리
+14. Repository Pattern을 적용할 때 SQLAlchemy Session의 위치
+15. DDD Aggregate와 ORM Relationship의 경계
+
+특히 Spring/JPA를 이미 공부했다면 다음 비교를 직접 코드로 만들어 보는 것이 좋다.
+
+```text
+Member
+  │
+  └── Order
+        │
+        └── OrderItem
+```
+
+동일한 도메인을 JPA와 SQLAlchemy 두 방식으로 각각 구현해 보면 다음 개념의 차이가 빠르게 보인다.
+
+```text
+mappedBy
+back_populates
+Cascade
+Dirty Checking
+Session
+Lazy Loading
+Fetch Join
+selectinload
+Aggregate Boundary
+```
+
+이 단계까지 이해하면 FastAPI에서 SQLAlchemy를 사용할 때 단순히 문법을 따라 작성하는 수준을 넘어, **관계와 조회 전략을 의도적으로 설계할 수 있는 기반**이 만들어진다.
+
+---
+
+## 참고
+
+- SQLAlchemy 2.0 Documentation: https://docs.sqlalchemy.org/en/20/
+- SQLAlchemy ORM Relationships: https://docs.sqlalchemy.org/en/20/orm/relationships.html
+- SQLAlchemy AsyncIO: https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html
+- FastAPI SQL Databases: https://fastapi.tiangolo.com/tutorial/sql-databases/
