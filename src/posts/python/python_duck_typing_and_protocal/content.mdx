@@ -1,0 +1,151 @@
+---
+title:  "파이썬으로 덕 타이핑 이해을 이해하고, 파이썬의 프로토콜(구조적 서브타이핑)이 무엇인지 알아본다."
+desc: 파이썬으로 덕 타이핑 이해을 이해하고, 파이썬의 프로토콜(구조적 서브타이핑)이 무엇인지 알아본다.
+date: 2026-08-22
+thumbnail: ./thumbnail.webp
+isHot: true
+isVisible: true
+tags: python, Duck typing, Protocal, Structual Subtyping
+---
+
+## 1. Dunck Typing: 덕 타이핑
+    -   "만약 어떤 새가 오리처럼 걷고, 오리처럼 갹갹거린다면, 그 새를 오리라고 부르겠다"
+
+덕 타이핑은 동적 타이핑 언어인 파이썬의 핵심 설계 철학 중 하나이다. 
+객체의 <u>실제 타입(Class)이나 상속 관계보다, 객체가 가진 행동(Method나 Attribute)을 중시</u>한다.
+즉, 특정 인터페이스나 상위 클래스를 명시적으로 상속받지 않더라도, 필요한 메서드만 구현되어 있다면 동일한 타입처럼 취급하여 코드를 실행할 수 있다.
+
+```python
+class CreditCard:
+    def process_payment(self, amount: float) -> bool:
+        print(f"신용카드로 {amount}원을 결제합니다.")
+        return True
+
+class PayPal:
+    def process_payment(self, amount: float) -> bool:
+        print(f"페이팔로 {amount}원을 결제합니다.")
+        return True
+
+def checkout(payment_method, amount: float) -> None:
+    """
+    덕타이핑을 활용한 결제 처리 함수
+    payment_method의 구체적인 타입(클래스)을 검사하지 않는다.
+    대신 process_payment라는 '행동'을 수행할 수 있다고 가정하고 실행한다.
+    """
+    payment_method.process_payment(amount)
+
+# 실행 예시
+card = CreditCard()
+paypal = PayPal()
+
+checkout(card, 10000)   # 정상 동작
+checkout(paypal, 20000) # 정상 동작
+```
+CreditCard와 PayPal은 서로 아무런 상속 관계가 없지만, checkout 함수는 두 객체 모두 process_payment 메서드를 가지고 있다는 사실 하나만으로 정상적으로 동작한다.
+
+## 2. Protocal, Structural Subtyping, 정적 덕 타이핑
+### [2-1] 전통적인 덕 타이핑의 한계
+전통적인 방식의 순수 덕타이핑은 매우 유연하지만, 런타임에 객체가 해당 메서드를 가지고 있지 않을 경우 치명적인 AttributeError를 발생시키는 레거시한 한계가 있다. 모던 파이썬 개발 및 대규모 프로젝트에서는 이러한 런타임 에러를 방지하기 위해 `typing.Protocol`을 활용한 <b>정적 덕타이핑</b>이 표준 트렌드로 자리잡았다.
+
+### [2-2] Protocal과 전통적인 덕타이핑의 차이
+전통적인 덕 타이핑은 "실행해보고 에러가 나면 처리한다(EAFP)."방식이었다면,
+Protocal은 "실행하기 전에 코드가 규격에 맞는지 검증한다."
+
+클래스가 명시적으로 상속을 받지 않아도, 프로토콜에 정의된 메서드 시그니처(이름, 매개변수, 타입, 반환 타입)만 일치하면 같은 타입으로 인정받아 IDE 자동 완성과 `mypy`같은 정적 분석 도구의 보호를 받을 수 있다.
+```python
+import logging
+from typing import Protocol, runtime_checkable
+from dataclasses import dataclass
+
+# 로깅 설정 (실무에서는 전역 설정이나 설정 파일을 따름)
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+logger = logging.getLogger(__name__)
+
+@runtime_checkable
+class PaymentProcessor(Protocol):
+    """
+    결제 처리를 위한 프로토콜.
+    이 규격을 따르는 모든 객체는 결제 수단으로 사용할 수 있습니다.
+    """
+    def process_payment(self, amount: float, currency: str = "KRW") -> bool:
+        """결제를 처리하고 성공 여부를 반환합니다."""
+        ...
+
+@dataclass
+class CreditCardProcessor:
+    """신용카드 결제 처리기 (상속 없음)"""
+    card_number: str
+
+    # Protocol의 시그니처와 정확히 일치해야 합니다.
+    def process_payment(self, amount: float, currency: str = "KRW") -> bool:
+        masked_card = f"****-****-****-{self.card_number[-4:]}"
+        logger.info(f"신용카드({masked_card})로 {amount:,.0f} {currency} 결제 승인 요청 중...")
+        # 외부 PG사 API 연동 로직이 들어갈 자리
+        return True
+
+@dataclass
+class PayPalProcessor:
+    """페이팔 결제 처리기 (상속 없음)"""
+    account_email: str
+
+    def process_payment(self, amount: float, currency: str = "KRW") -> bool:
+        logger.info(f"PayPal({self.account_email}) 계정으로 {amount:,.0f} {currency} 결제 승인 요청 중...")
+        return True
+
+class PointProcessor:
+    """
+    [잘못된 구현 예시]
+    메서드 이름은 같지만 매개변수(currency가 없음)가 다릅니다.
+    """
+    def process_payment(self, amount: float) -> bool:
+        logger.info(f"포인트 {amount}점 차감 중...")
+        return True
+
+def checkout(processor: PaymentProcessor, amount: float) -> None:
+    """
+    주어진 결제 수단을 통해 결제를 진행합니다.
+    processor는 PaymentProcessor 프로토콜을 준수해야 합니다.
+    """
+    if amount <= 0:
+        raise ValueError("결제 금액은 0보다 커야 합니다.")
+    
+    try:
+        success = processor.process_payment(amount)
+        if success:
+            logger.info("결제가 성공적으로 완료되었습니다.")
+        else:
+            logger.error("결제 승인이 거절되었습니다.")
+    except Exception as e:
+        logger.error(f"결제 처리 중 치명적인 오류 발생: {e}")
+        raise
+
+# === 실행 예시 ===
+if __name__ == "__main__":
+    card_payment = CreditCardProcessor(card_number="1234567890123456")
+    paypal_payment = PayPalProcessor(account_email="user@example.com")
+    point_payment = PointProcessor()
+
+    checkout(card_payment, 50000)   # 정상 동작
+    checkout(paypal_payment, 15000) # 정상 동작
+    
+    # mypy 정적 분석 시 여기서 에러를 잡아냅니다.
+    # checkout(point_payment, 5000)
+```
+1. **@runtime_checkable 데코레이터 적용**
+:   기본적으로 Protocol은 정적 분석(코드 작성 시점)을 위한 도구이므로 런타임에 isinstance() 검사를 할 수 없다.
+    하지만 @runtime_checkable을 붙이면 런타임에도 isinstance(card_payment, PaymentProcessor) 형태로 덕타이핑 구현 여부를 검증할 수 있어 방어적 프로그래밍에 유리하다.
+
+2. **정확한 시그니처 강제**
+:   위 코드의 PointProcessor는 process_payment라는 메서드는 있지만, currency 파라미터가 누락되어 프로토콜을 완벽히 충족하지 못한다.
+    과거의 덕타이핑에서는 이 코드가 실행되어 런타임 에러를 유발할 수 있지만, 정적 분석기를 통과시키면 배포 전에 문제를 차단할 수 있다.
+
+3. **CI/CD 파이프라인에서의 Mypy 검증**
+:   현업에서는 개발자가 코드를 푸시할 때 CI 환경에서 자동으로 mypy가 실행되도록 구성한다. 위 코드를 payment.py로 저장하고 터미널에서 아래 명령어를 실행하면 된다.
+    ```bash
+    pip install mypy
+    mypy payment.py
+    ```
+    만약 checkout(point_payment, 5000) 주석을 해제하고 실행하면, mypy는 즉시 다음과 같은 에러를 리포팅하여 장애를 예방한다.
+    ```text
+    error: Argument 1 to "checkout" has incompatible type "PointProcessor"; expected "PaymentProcessor"
+    ```
