@@ -90,13 +90,6 @@ from sqlalchemy.orm import DeclarativeBase
 class Base(DeclarativeBase):
     pass
 ```
-
-| 구분 | 주요 역할 | 상세 설명 |
-| :--- | :--- | :--- |
-| **중앙 관리 탑 (Base)** | 모델 클래스 자동 추적 | `User`, `Post` 등 이 클래스를 상속받은 모든 모델을 SQLAlchemy가 인지하고 관리한다. |
-| **메타데이터 저장소 (Metadata)** | DB 구조 정보 집약 | 테이블 이름과 컬럼 타입 등 DB 구조에 관한 모든 정보를 한곳에 모아둔다. |
-| **테이블 생성 (`create_all`)** | 실제 DB 테이블 생성 | `Base.metadata.create_all(engine)` 명령 실행 시 메타데이터를 기반으로 DB에 테이블을 만든다. |
-
 먼저 **orm.py** 파일에 **Base 클래스**를 정의한다. **Base 클래스**는 <u>이 클래스를 상속받는 모든 클래스는 DB 테이블로 취급한다</u>라는 기준점이 된다.
 
 **DeclarativeBase**는 SQLAlchemy에서 파이썬 클래스와 DB 테이블을 연결(매핑)해 주는 최상위 부모 클래스이다.  <a href="https://docs.sqlalchemy.org/en/20/orm/declarative_styles.html" target="_blank">SQLAlchemy 2.0부터 도입된 표준 방식이다.</a>
@@ -136,6 +129,13 @@ class Todo(Base):
 # main.py
 Base.metadata.create_all(bind=engine)   # SQLAlchemy가 정의된 모델 구조를 바탕으로 데이터베이스에 실제 테이블을 자동으로 생성
 ```
+| 구분 | 주요 역할 | 상세 설명 |
+| :--- | :--- | :--- |
+| **중앙 관리 탑 (Base)** | 모델 클래스 자동 추적 | `User`, `Post` 등 이 클래스를 상속받은 모든 모델을 SQLAlchemy가 인지하고 관리한다. |
+| **메타데이터 저장소 (Metadata)** | DB 구조 정보 집약 | 테이블 이름과 컬럼 타입 등 DB 구조에 관한 모든 정보를 한곳에 모아둔다. |
+| **테이블 생성 (`create_all`)** | 실제 DB 테이블 생성 | `Base.metadata.create_all(engine)` 명령 실행 시 메타데이터를 기반으로 DB에 테이블을 만든다. |
+
+
 DB 테이블을 생성하기 위해 <b>Base.metadata.create_all(bind=engine)</b>을 작성해준다.
 
 ### [1-4] SQLAlchemy를 이용한 조회
@@ -282,9 +282,28 @@ def update_todo(todo_id: int, body: TodoRequest):
 | 2 | 세션에 등록 | 삭제 대상 모델 객체를 session.delete()로 세션에 등록한다. |
 | 3 | 변경 사항 저장 | session.commit() 을 호출해 세션에 등록된 변경 사항을 DB에 실제로 저장한다. |
 
-#### (1) 할 일 삭제하기
+#### (3) 할 일 삭제하기
 ```python
+@app.delete(
+    path="/todos/{todo_id}",
+    status_code=status.HTTP_204_NO_CONTENT
+)
+def delete_todo_handler(todo_id: int):
+    session = SessionFactory()
+    try:
+        stmt = select(Todo).where(Todo.id == todo_id)
+        todo = session.execute(stmt).scalars().first()
 
+        if todo:
+            session.delete(todo)
+            session.commit()
+            return
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Todo not found."
+        )
+    finally:
+        session.close()
 ```
 
 [참고 자료]
