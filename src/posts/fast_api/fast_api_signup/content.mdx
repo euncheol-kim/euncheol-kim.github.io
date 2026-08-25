@@ -84,7 +84,7 @@ class Todo(Base):
         ForeignKey("user.id"),
         nullable=True
     )
-    user: Mapped[User] = relationship(      # DB에는 존재하지 않지만 연관된 객체를 바로 탐색(객체 그래프 탐색)할 수 있게 해주는 가상 속성
+    user: Mapped["User"] = relationship(      # DB에는 존재하지 않지만 연관된 객체를 바로 탐색(객체 그래프 탐색)할 수 있게 해주는 가상 속성
         back_populates="todos"
     )
 
