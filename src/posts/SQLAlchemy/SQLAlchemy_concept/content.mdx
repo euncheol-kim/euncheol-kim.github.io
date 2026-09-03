@@ -3,7 +3,7 @@ title:  "SQLAlchemy2.0 동작 메커니즘의 이해를 위한 기초 학습 정
 desc: 코딩 자율 학습 FastAPI 파이썬 백엔드 개발 입문을 보며 SQLAlchemy2.0 를 학습한 내용을 정리했습니다. SQLAlchemy2.0의 동작 방식과 기본 개념을 주로 다루며, 책 내용 외적 학습 내용을 부록에 담았습니다. 이 기술서는 SQLAlchemy2.0 학습 초반에 매우 중요한 기술 문서입니다.
 date: 2026-08-22
 thumbnail: ./thumbnail.webp
-isHot: true
+isHot: false
 isVisible: true
 tags: in progress, skill sheet, python.14, Fast API
 ---
@@ -158,7 +158,7 @@ def get_todos():
     session = SessionFactory()
     try:
         stmt = select(Todo)                   # 쿼리의 생성 (의미: 모든 행을 리스트 형태로 가져온다.)
-        todos = session.execute(stmt).all()   # 실행 + 결과 반환
+        todos = session.execute(stmt).scalars().all()   # 실행 + 결과 반환
         return todos
     finally:
         session.close()
@@ -187,7 +187,7 @@ def get_todo(todo_id: int):
     session = SessionFactory()
     try:
         stmt = select(Todo).where(Todo.id == todo_id)   # 단일 조회 쿼리 객체 생성
-        todo = session.execute(stmt).scalar().first()   # 쿼리 실행 및 단일 결과 선택
+        todo = session.execute(stmt).scalars().first()   # 쿼리 실행 및 단일 결과 선택
 
         if todo:
             return todo

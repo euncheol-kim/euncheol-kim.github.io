@@ -1,0 +1,86 @@
+---
+title:  "SQLAlchemy2.0 Skill sheet"
+desc: SQLAlchemy2.0 스킬시트입니다.
+date: 2026-08-31
+thumbnail: ./thumbnail.webp
+isHot: false
+isVisible: true
+tags: in progress, SQLAlchemmy2.0
+---
+
+## 1. SQLAlchemy 2.0의 반환 형태: Tuple
+1. 튜플 반환 
+
+    -  
+        | 실행 코드 | 반환 형태 |
+        |---|---|
+        |session.execute(select(Todo)).all()|`[ (<Todo 객체>,), (<Todo 객체>,) ]` (튜플 리스트 반환)|
+
+    - 
+        데이터베이스 쿼리(SELECT)는 여러 컬럼을 동시에 조회할 수 있어야 하므로, SQLAlchemy 2.0의 `session.execute(select(...))`는 결과의 일관성을 위해 무조건 데이터를 Row 객체(튜플과 동일하게 동작)로 감싸서 반환한다.
+
+    -
+        <u>튜플의 껍데기를 벗기고 알맹이(엔티티)만 추출하려면 반드시 `scalars()` 메서드를 체이닝해야 한다.</u>
+
+
+## 2. 객체의 문자열 표현 (\_\_repr\_\_)
+
+-
+     **단일 객체 인식:** 로그에 출력된 `<Todo(id=1, title='...', is_done=True)>`는 딕셔너리나 다중 데이터가 아니라 단 하나의 객체(Object)를 의미한다.
+-
+     **친절한 이름표:** 튜플 안에 쉼표로 구분된 여러 값이 있는 것이 아니라, 개발자가 알아보기 쉽게 `__repr__`이라는 '이름표'가 붙은 1개의 객체만 들어있는 상태이다.
+-
+     **명시적 재정의 필요:** 
+     ```python { 26 }
+     class Todo(Base):
+    __tablename__="todo"
+
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        autoincrement=True,
+    )
+    title: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+    is_done: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("user.id"),
+        nullable=True
+    )
+    user: Mapped["User"] = relationship(
+        back_populates="todos"
+    )
+
+    def __repr__(self) -> str:
+        return f"<Todo(id={self.id}, title='{self.title}', is_done={self.is_done})>"
+    ```
+     단순히 `DeclarativeBase`를 상속한다고 해서 객체 출력 형태가 자동으로 예쁘게 바뀌지는 않는다. 내부 데이터를 직관적으로 확인하려면 모델 클래스 내부에 `__repr__` 메서드를 직접 재정의(Overriding)하거나 관련 기능을 함께 상속받아야 한다.
+
+| 구분 | 출력 형태 예시 |
+| :--- | :--- |
+| **파이썬 기본 객체 (재정의 전)** | `<__main__.Todo object at 0x7f9b8c123450>` |
+| **\_\_repr\_\_ 재정의 후** | `<Todo(id=1, title='나의 첫 번째 타이틀', is_done=True)>` |
+
+> **💡 Note**
+> 매번 `__repr__`을 수동으로 작성하는 번거로움을 줄이기 위해, 최근 SQLAlchemy 2.0에서는 Python의 내장 데이터 클래스 기능을 결합한 `MappedAsDataclass`를 `DeclarativeBase`와 함께 상속받아 `__repr__`을 자동으로 생성하는 방식을 널리 채택하고 있다.
+
+
+---
+
+
+## 🌱 부록
+## 1. SQLAlchemy2.0와 Pydantic을 같이 사용하며 발생할 수 있는 문제
+```text
+# Error Log
+{'type': 'missing', 'loc': ('response', 0, 'id'), 'msg': 'Field required', 'input': (<Todo(id=1, title='나의 첫 번째 타이틀 ', is_done=True)>,)}
+```
+FastAPI와 SQLAlchemy를 연동하여 데이터를 조회할 때, <b>Pydantic 검증 단계에서 위와 같은 에러가 발생하는 경우가 있다. 이 에러는 Pydantic이 순수한 Todo 객체를 기대했으나, 실제로는 객체가 튜플 안에 감싸진 형태`(<Todo 객체>, )`로 전달되어 속성(필드)을 찾지 못해 발생한다.</b>
+
+<b>[해결 방법]</b>
+    - <u>튜플의 껍데기를 벗기고 알맹이(엔티티)만 추출하려면 반드시 `scalars()` 메서드를 체이닝해야 한다.</u>
