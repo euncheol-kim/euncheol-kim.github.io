@@ -24,8 +24,8 @@
   --background: #f3f7f3;
   --foreground: var(--black);
 
-  --secondary: hsl(140 22% 94%);
-  --secondary-foreground: hsl(150 22% 18%);
+  --secondary: hsl(140 26% 88%);
+  --secondary-foreground: hsl(150 25% 18%);
 
   --informative: #e0f2fe;
   --informative-foreground: #0c4a6e;
