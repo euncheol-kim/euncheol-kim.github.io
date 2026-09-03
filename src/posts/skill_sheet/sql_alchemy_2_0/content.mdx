@@ -70,7 +70,41 @@ tags: in progress, SQLAlchemmy2.0
 > **💡 Note**
 > 매번 `__repr__`을 수동으로 작성하는 번거로움을 줄이기 위해, 최근 SQLAlchemy 2.0에서는 Python의 내장 데이터 클래스 기능을 결합한 `MappedAsDataclass`를 `DeclarativeBase`와 함께 상속받아 `__repr__`을 자동으로 생성하는 방식을 널리 채택하고 있다.
 
-## 3. 
+## 3. Enum을 활용한 상수 값 관리 예시
+```python
+import enum
+from sqlalchemy import String, Enum
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+# 1. 파이썬 내장 enum을 사용하여 네임스페이스 충돌 방지 (설명을 위함)
+class UserRole(enum.Enum):
+    ADMIN = ("관리자", 0)
+    USER = ("사용자", 1)
+
+    def __init__(self, kor_name: str, access_level: int):
+        self.kor_name = kor_name
+        self.access_level = access_level
+
+class Base(DeclarativeBase):
+    pass
+
+class UserModel(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    username: Mapped[str] = mapped_column(String(30))
+
+    # 2. native_enum=False를 설정하여 VARCHAR 타입으로 강제 저장
+    role: Mapped[UserRole] = mapped_column(
+        Enum(UserRole, native_enum=False, length=20),
+        default=UserRole.USER,
+        nullable=False
+    )
+```
+- SQLAlchemy 2.0은 타입 힌트`(Mapped[UserRole])`를 분석하여 해당 타입이 파이썬 Enum 클래스인 경우 데이터베이스 컬럼을 자동으로 매핑한다.
+
+- 기본적으로 Enum의 name 속성('ADMIN', 'USER')을 문자열로 저장한다.
+
 
 
 
