@@ -1,0 +1,2893 @@
+---
+title:  "[Author:ChatGPT] AI Agent, 나는 에이전트 동작 전체 흐름과 어떤 데이터를 어디에 저장하는지 알고싶다."
+desc: AI Agent에 질문이 들어오면 RAG검색, Vector생성/저장/검색, LLM 호출,Tool실행, Agent Loop, Conversation/Message 저장까지 전체 흐름의 이해와, 어떤 데이터를 어떤 물리적 시스템에 어떤 이유로 저장하는지 설명합니다.
+date: 2026-09-07
+thumbnail: ./thumbnail.webp
+isHot: true
+isVisible: true
+tags: AI Agent, RAG, Vector, LLM 호출, Tool, Agent Loop, Conversation/Message
+---
+
+## 들어가면서
+
+> 데이터의 가치는 매우 높다. 근데 어느 시점에 어떤 데이터를 저장해야하는가?
+
+혁신적인 기술이 개발되면 언젠가 원천 데이터 자체의 가치는 떨어질지도 모른다. 하지만 적어도 지금은 아니다. 
+현대 개발 분야에서 데이터가 가진 가치는 절대적이다. 우리가 아는 모든 인공지능은 결국 데이터를 기반으로 추론해서 결과를 내놓는다. 그리고 이 추론 과정에는 성격이 다른 이질적인 데이터를 구조적으로 연결하고, 그 안에서 새로운 인사이트를 이끌어내는 것까지 모두 포함되어 있다.
+
+결국 이 가치 있는 데이터를 '어떤 물리적 시스템에, 어떻게, 그리고 어느 시점에' 적재하고 관리해야 하는가의 문제로 귀결된다. 이 글에서는 어느 시점에 어떤 데이터를 저장하는지에 대한 전체적인 큰 그림을 이해하고자 작성하게 되었다. 다만, 서비스 방향성과 목적에 따라 데이터를 저장하는 시점과 대상이 달라질 수 있기 때문에 모든 상황에 적용되는 글은 아님을 기억한다.
+
+<u>빠른 학습과 품질 높은 글을 위해 원문은 ChatGPT를 통해 답변을 얻은 내용임을 밝힌다.</u>
+
+---
+
+## 먼저 알아야 할 개념
+
+AI Agent의 전체 동작을 이해하려면 몇 가지 용어를 먼저 구분할 필요가 있다.
+
+처음에는 `LLM`, `Embedding`, `Vector`, `RAG`, `Tool`, `Agent` 같은 용어가 한꺼번에 등장하기 때문에 각각이 비슷한 역할을 하는 것처럼 느껴질 수 있다.
+
+하지만 실제로는 책임이 상당히 명확하게 나뉜다.
+
+| 용어              | 의미                                   |
+| --------------- | ------------------------------------ |
+| LLM             | 자연어를 이해하고 생성하는 대규모 언어 모델             |
+| LLM API         | 애플리케이션에서 외부 LLM을 호출하기 위한 API         |
+| Prompt          | LLM에게 전달하는 입력                        |
+| Context         | 하나의 LLM 호출에서 참고할 수 있도록 제공되는 전체 정보    |
+| Embedding       | 텍스트 등의 의미를 숫자로 이루어진 Vector로 표현하는 과정  |
+| Embedding Model | Text를 Vector로 변환하는 모델                |
+| Vector          | `[0.12, -0.43, 0.81, ...]` 형태의 숫자 배열 |
+| Chunk           | 긴 문서를 검색하기 좋은 크기로 나눈 텍스트 조각          |
+| Retrieval       | 필요한 정보를 저장소에서 검색해오는 행위               |
+| RAG             | 신뢰성 있는 데이터 기반으로 검색한 정보를 LLM에게 제공하여 답변을 생성하는 구조       |
+| Evidence        | LLM이 답변할 때 근거로 사용하도록 제공한 정보          |
+| Tool            | Agent가 호출할 수 있도록 외부에 제공된 기능          |
+| Tool Calling    | LLM 또는 Agent가 Tool 실행을 요청하는 것        |
+| Agent           | LLM을 활용하여 다음 행동을 판단하고 실행하는 시스템       |
+| Agent Loop      | 판단 → 행동 → 결과 확인 → 재판단을 반복하는 과정       |
+| Conversation    | 하나의 대화방 또는 대화 Thread                 |
+| Message         | Conversation 안에서 발생한 각각의 사용자/AI 발언   |
+| Agent Run       | 하나의 사용자 요청을 처리하기 위해 수행된 Agent 실행 단위  |
+| Trace           | Agent가 실제로 어떤 행동을 수행했는지 남기는 실행 기록    |
+
+이 글에서는 위 개념들이 실제 애플리케이션 안에서 어떻게 연결되는지를 하나씩 살펴본다.
+
+---
+
+## AI Agent는 LLM 그 자체가 아니다
+
+AI Agent를 처음 접하면 LLM과 Agent를 동일한 개념으로 생각하기 쉽다.
+
+하지만 LLM은 Agent를 구성하는 핵심 요소 중 하나일 뿐이다.
+
+```text
+AI Agent
+├── LLM
+├── RAG
+├── Tool
+├── Memory
+├── Workflow
+└── Storage
+```
+
+LLM은 주로 다음과 같은 역할을 한다.
+
+```text
+자연어 이해
+추론
+분류
+요약
+정보 추출
+Tool 사용 판단
+답변 생성
+```
+
+반면 Agent는 LLM의 판단을 이용해 실제 시스템 안에서 무엇을 해야 할지를 결정한다.
+
+예를 들어 다음과 같은 질문이 들어왔다고 가정해보자.
+
+```text
+"우리 회사 육아휴직은 최대 얼마나 사용할 수 있어?"
+```
+
+Agent는 단순히 LLM에게 바로 질문을 전달하는 대신 다음과 같이 동작할 수 있다.
+
+```text
+사용자 질문
+    ↓
+회사 내부 문서를 검색해야 하는지 판단
+    ↓
+RAG 검색
+    ↓
+관련 사내 규정 확보
+    ↓
+LLM에게 질문 + 규정 전달
+    ↓
+최종 답변 생성
+```
+
+여기에 사용자의 개인 휴직 사용량까지 확인해야 한다면 DB 조회 Tool을 추가로 호출할 수도 있다.
+
+결국 Agent는 **LLM을 중심으로 검색, 외부 API, DB 조회, 비즈니스 로직 등을 연결하는 실행 주체**라고 볼 수 있다.
+
+---
+
+# AI Agent에는 크게 두 가지 데이터 흐름이 존재한다
+
+RAG 기반 Agent를 이해할 때는 시스템의 동작을 두 가지 흐름으로 나누는 것이 좋다.
+
+첫 번째는 **문서를 검색 가능한 상태로 만드는 과정**이다.
+
+```text
+Document
+    ↓
+Parsing
+    ↓
+Chunking
+    ↓
+Embedding
+    ↓
+Vector 저장
+```
+
+두 번째는 **사용자의 질문을 처리하는 과정**이다.
+
+```text
+User Question
+    ↓
+Embedding
+    ↓
+Vector Search
+    ↓
+Evidence
+    ↓
+LLM
+    ↓
+Answer
+```
+
+첫 번째 과정은 문서가 등록되거나 변경되는 시점에 수행된다.
+
+두 번째 과정은 사용자가 질문할 때마다 수행된다.
+
+이 둘을 분리해서 이해하는 것이 중요하다.
+
+---
+
+# 1. 문서를 검색 가능한 상태로 만드는 과정
+
+회사에서 다음과 같은 문서를 AI Agent가 참고하도록 만들고 싶다고 가정한다.
+
+```text
+2026년 인사규정.pdf
+```
+
+이 PDF 파일을 Vector DB에 그대로 넣는 것은 아니다.
+
+몇 가지 전처리 과정을 거쳐야 한다.
+
+---
+
+## 1-1. 원본 파일 저장
+
+먼저 원본 PDF를 물리적인 저장소에 저장한다.
+
+일반적으로 PDF, 이미지, 동영상 같은 파일은 RDB보다 Object Storage가 적합하다.
+
+예를 들면 다음과 같다.
+
+```text
+Amazon S3
+MinIO
+Google Cloud Storage
+Azure Blob Storage
+```
+
+예를 들어 S3를 사용한다면 다음과 같이 저장할 수 있다.
+
+```text
+s3://company-documents/hr/2026-employee-policy.pdf
+```
+
+그리고 RDB에는 파일 자체가 아니라 Metadata를 저장한다.
+
+```text
+document
+
+id
+title
+storage_key
+mime_type
+status
+created_at
+```
+
+예를 들어 다음과 같다.
+
+```text
+id           : 100
+title        : 2026년 인사규정
+storage_key  : hr/2026-employee-policy.pdf
+mime_type    : application/pdf
+status       : READY
+```
+
+### 원본 파일을 반드시 저장해야 하는 이유
+
+원본 문서는 이 Knowledge의 **Source of Truth**이기 때문이다.
+
+이후에 생성되는 Chunk와 Embedding은 모두 원본 문서로부터 다시 만들어낼 수 있다.
+
+```text
+Original Document
+        ↓
+      Chunk
+        ↓
+    Embedding
+```
+
+하지만 원본 문서를 잃어버리면 원래 Knowledge 자체를 잃어버린다.
+
+따라서 원본 파일은 보존 가치가 매우 높은 데이터다.
+
+---
+
+## 1-2. Parsing
+
+PDF를 저장했다고 해서 바로 검색할 수 있는 것은 아니다.
+
+PDF 안에 있는 텍스트를 추출해야 한다.
+
+예를 들어 원본 PDF에 다음 내용이 있다고 가정한다.
+
+```text
+제12조 육아휴직
+
+근로자는 육아휴직을 최대 1년까지 사용할 수 있다.
+
+육아휴직 신청은 시작일 30일 전까지 신청하여야 한다.
+```
+
+PDF에서 이러한 텍스트를 추출하는 과정을 `Parsing`이라고 한다.
+
+```text
+PDF
+ ↓
+Parser
+ ↓
+Text
+```
+
+다만 실제 문서 처리에서는 단순 Text Parsing만으로 끝나지 않을 수 있다.
+
+문서에 따라 다음 과정이 추가될 수 있다.
+
+```text
+표 구조 복원
+Header/Footer 제거
+불필요한 공백 제거
+OCR
+페이지 Metadata 추출
+문서 구조 분석
+```
+
+---
+
+## 1-3. Chunking
+
+추출된 문서 전체를 하나의 Vector로 만드는 것이 항상 좋은 것은 아니다.
+
+예를 들어 100페이지짜리 회사 규정집 전체를 하나로 묶으면 다음과 같은 여러 주제가 하나의 데이터 안에 들어간다.
+
+```text
+휴가
+급여
+복지
+근무시간
+징계
+보안
+퇴직
+```
+
+사용자가 육아휴직에 대해서 질문했는데 100페이지 전체가 검색 단위라면 필요한 내용을 정확하게 찾기가 어렵다.
+
+그래서 문서를 적당한 크기로 나눈다.
+
+```text
+Document
+   ↓
+Chunking
+   ↓
+
+Chunk #1
+"회사의 목적은..."
+
+Chunk #2
+"연차휴가는..."
+
+Chunk #3
+"육아휴직은 최대 1년..."
+
+Chunk #4
+"육아휴직 신청은..."
+```
+
+이렇게 나눈 각각의 텍스트 조각을 `Chunk`라고 한다.
+
+### Chunk를 저장하는 이유
+
+RAG에서 실제 검색 결과로 사용되는 대상이 Chunk이기 때문이다.
+
+검색 결과가 다음과 같이 나왔다고 가정한다.
+
+```text
+Chunk #315
+```
+
+그렇다면 시스템은 해당 Chunk에 들어 있는 자연어를 가져와 LLM에게 전달해야 한다.
+
+따라서 일반적으로 다음 정도의 정보를 저장할 수 있다.
+
+```text
+document_chunk
+
+id
+document_id
+chunk_index
+content
+embedding
+```
+
+---
+
+# 2. Embedding은 무엇인가?
+
+Embedding은 자연어의 의미를 숫자로 표현하는 과정이다.
+
+예를 들어 다음 문장이 있다고 가정한다.
+
+```text
+"육아휴직은 최대 1년 사용할 수 있습니다."
+```
+
+Embedding Model에 입력하면 다음과 비슷한 값이 생성된다.
+
+```text
+[
+  0.124,
+ -0.371,
+  0.812,
+  0.031,
+ ...
+]
+```
+
+실제로는 수백 개 또는 수천 개의 숫자로 이루어질 수 있다.
+
+이 숫자의 배열이 `Vector`다.
+
+---
+
+## 왜 텍스트를 굳이 Vector로 만드는가?
+
+다음 두 문장을 보자.
+
+```text
+A. "육아휴직은 얼마나 사용할 수 있나요?"
+
+B. "아이 때문에 장기간 회사를 쉬려면 기간이 얼마나 되나요?"
+```
+
+문자열만 보면 두 문장은 상당히 다르다.
+
+그러나 의미적으로는 매우 가깝다.
+
+Embedding Model은 이러한 의미적 관계를 Vector 공간에 표현하도록 학습되어 있다.
+
+개념적으로 다음과 같이 생각할 수 있다.
+
+```text
+Vector Space
+
+        ● "육아휴직 기간은?"
+
+      ● "아이 때문에 얼마나 쉴 수 있어?"
+
+
+                         ● "오늘 서울 날씨는?"
+```
+
+의미가 비슷한 문장일수록 Vector 공간에서도 가까운 위치에 존재하도록 표현한다.
+
+따라서 Vector의 거리를 비교하면 **의미적으로 유사한 문장을 검색**할 수 있다.
+
+---
+
+# 3. Vector는 누가 만드는가?
+
+중요한 점이 하나 있다.
+
+`pgvector`나 Vector DB가 Vector를 생성하는 것이 아니다.
+
+Vector는 **Embedding Model**이 만든다.
+
+```text
+Text
+ ↓
+Embedding Model
+ ↓
+Vector
+```
+
+그리고 생성된 Vector를 저장하는 곳이 Vector Store다.
+
+```text
+Vector
+ ↓
+PostgreSQL + pgvector
+Qdrant
+OpenSearch
+...
+```
+
+즉 역할은 다음과 같이 구분된다.
+
+```text
+Embedding Model
+→ Vector 생성
+
+Vector Store
+→ Vector 저장 및 검색
+```
+
+---
+
+# 4. pgvector란 무엇인가?
+
+`pgvector`는 PostgreSQL에서 Vector를 저장하고 검색할 수 있도록 해주는 Extension이다.
+
+일반 PostgreSQL에는 일반적인 타입들이 존재한다.
+
+```text
+BIGINT
+VARCHAR
+TEXT
+BOOLEAN
+TIMESTAMP
+```
+
+pgvector를 추가하면 여기에 `vector` 타입을 사용할 수 있게 된다.
+
+```sql
+CREATE EXTENSION vector;
+```
+
+그리고 다음과 같은 테이블을 만들 수 있다.
+
+```sql
+CREATE TABLE document_chunk (
+    id BIGINT PRIMARY KEY,
+    document_id BIGINT NOT NULL,
+    chunk_index INTEGER NOT NULL,
+    content TEXT NOT NULL,
+    embedding VECTOR(N)
+);
+```
+
+여기서 `N`은 사용하는 Embedding Model이 만드는 Vector의 차원 수이다.
+
+---
+
+# 5. Vector가 실제 DB에 저장되기까지
+
+전체 흐름을 연결하면 다음과 같다.
+
+```text
+2026년 인사규정.pdf
+        ↓
+       S3
+        ↓
+     Parsing
+        ↓
+     Chunking
+        ↓
+"육아휴직은 최대 1년..."
+        ↓
+  Embedding Model
+        ↓
+[0.183, -0.271, ...]
+        ↓
+PostgreSQL + pgvector
+```
+
+DB에는 개념적으로 다음과 같은 데이터가 저장된다.
+
+```text
+document_chunk
+
+id
+1003
+
+document_id
+100
+
+content
+"육아휴직은 최대 1년까지 사용할 수 있다."
+
+embedding
+[0.183, -0.271, 0.824, ...]
+```
+
+문서의 Parsing부터 Embedding을 생성하고 검색 가능한 상태로 만드는 전체 과정을 흔히 `Ingestion Pipeline` 또는 `Indexing Pipeline`이라고 부른다.
+
+```text
+Document
+ ↓
+Parsing
+ ↓
+Cleaning
+ ↓
+Chunking
+ ↓
+Embedding
+ ↓
+Vector 저장
+ ↓
+Indexing
+```
+
+---
+
+# 6. Embedding을 왜 저장하는가?
+
+Embedding은 원본 데이터가 아니다.
+
+```text
+Document
+ ↓
+Chunk
+ ↓
+Embedding
+```
+
+따라서 원본 Chunk가 존재한다면 Embedding을 다시 생성할 수 있다.
+
+그렇다면 굳이 왜 저장할까?
+
+가장 큰 이유는 **비용과 성능**이다.
+
+사용자가 질문할 때마다 모든 Chunk를 다시 Embedding한다고 가정해보자.
+
+문서 Chunk가 100만 개라면 질문 한 번마다 100만 번의 Embedding이 필요하다.
+
+현실적인 방법이 아니다.
+
+그래서 문서가 등록될 때 미리 Embedding을 계산해서 저장한다.
+
+```text
+문서 등록
+ ↓
+Embedding 미리 계산
+ ↓
+저장
+
+사용자 질문
+ ↓
+저장된 Vector와 바로 비교
+```
+
+결국 Embedding을 저장하는 이유는 다음과 같다.
+
+```text
+검색 속도
+Embedding API 비용 절감
+실시간 응답 성능
+```
+
+---
+
+# 7. 사용자가 질문하면 무엇이 일어나는가?
+
+이제 문서를 검색 가능한 상태로 만들었다고 가정한다.
+
+사용자가 다음 질문을 한다.
+
+```text
+"육아휴직 얼마나 쓸 수 있어?"
+```
+
+RAG에서는 이러한 자연어 검색 문장을 일반적으로 `Query`라고 부른다.
+
+여기에서 말하는 Query는 SQL Query가 아니다.
+
+```text
+RAG Query
+→ 자연어 검색 질의
+
+SQL Query
+→ SELECT, INSERT, UPDATE ...
+```
+
+문맥에 따라 같은 `Query`라는 단어가 서로 다른 의미로 사용될 수 있으므로 구분할 필요가 있다.
+
+---
+
+# 8. 사용자 질문 역시 Vector로 변환한다
+
+문서 Chunk만 Vector로 만들어 놓는 것으로 검색이 끝나는 것은 아니다.
+
+사용자의 질문도 동일한 Embedding Model을 사용해 Vector로 변환한다.
+
+```text
+"육아휴직 얼마나 쓸 수 있어?"
+            ↓
+      Embedding Model
+            ↓
+[0.171, -0.244, 0.809, ...]
+```
+
+이 값을 `Query Embedding` 또는 `Query Vector`라고 부를 수 있다.
+
+---
+
+# 9. Query Vector와 Document Vector를 비교한다
+
+이제 PostgreSQL + pgvector에서 Query Vector와 저장된 Chunk Vector 사이의 거리를 비교한다.
+
+개념적으로 다음과 같다.
+
+```text
+Query Vector
+    ↓
+
+┌─────────────────────────┐
+│ Document Vector #1      │
+│ Document Vector #2      │
+│ Document Vector #3      │
+│ ...                     │
+└─────────────────────────┘
+
+    ↓
+
+가장 가까운 Vector 검색
+```
+
+SQL은 대략 다음과 같은 형태가 될 수 있다.
+
+```sql
+SELECT
+    id,
+    content,
+    embedding <=> :query_embedding AS distance
+FROM document_chunk
+ORDER BY embedding <=> :query_embedding
+LIMIT 5;
+```
+
+검색 결과:
+
+```text
+1위
+
+"육아휴직은 최대 1년까지 사용할 수 있다."
+
+
+2위
+
+"육아휴직 신청은 시작일 30일 전에 해야 한다."
+```
+
+이러한 검색 행위를 `Retrieval`이라고 한다.
+
+---
+
+# 10. LLM에게 Vector를 전달하는 것은 아니다
+
+처음 Vector를 접하면 이런 생각을 할 수 있다.
+
+```text
+Query
+ ↓
+Vector Search
+ ↓
+Vector
+ ↓
+LLM
+```
+
+하지만 일반적으로 그렇지 않다.
+
+Vector는 **관련 문서를 찾는 수단**이다.
+
+검색 후 LLM에게 전달하는 것은 검색된 Chunk의 자연어 내용이다.
+
+```text
+Query
+ ↓
+Query Vector
+ ↓
+Vector Search
+ ↓
+관련 Chunk 발견
+ ↓
+Chunk의 자연어 Content
+ ↓
+LLM
+```
+
+예를 들어 LLM에는 다음과 같은 형태의 Context가 전달될 수 있다.
+
+```text
+다음 회사 규정을 근거로 답변하세요.
+
+[Evidence 1]
+육아휴직은 최대 1년까지 사용할 수 있다.
+
+[Evidence 2]
+육아휴직 신청은 시작일 30일 전에 해야 한다.
+
+[User Question]
+육아휴직은 얼마나 사용할 수 있나요?
+```
+
+LLM은 이 정보를 이용하여 다음과 같은 답변을 생성한다.
+
+```text
+회사 규정에 따르면 육아휴직은 최대 1년까지 사용할 수 있습니다.
+```
+
+---
+
+# 11. 이것이 RAG다
+
+RAG는 `Retrieval-Augmented Generation`의 약자다.
+
+이름 그대로 검색을 통해 확보한 정보를 LLM의 답변 생성에 추가하는 구조다.
+
+```text
+Retrieval
++
+Generation
+```
+
+전체적으로는 다음과 같다.
+
+```text
+User Question
+      ↓
+Query Embedding
+      ↓
+Vector Search
+      ↓
+Relevant Chunks
+      ↓
+Evidence
+      ↓
+Question + Evidence
+      ↓
+LLM
+      ↓
+Answer
+```
+
+RAG의 핵심은 LLM이 원래 알고 있던 지식만으로 답변하게 하는 것이 아니라, **우리 시스템이 신뢰하는 외부 Knowledge를 검색하여 Context로 제공한다는 점**에 있다.
+
+---
+
+# 12. Vector Search 결과가 곧 신뢰 가능한 Evidence는 아니다
+
+여기에서 주의할 점이 있다.
+
+Vector Search에서 높은 Similarity가 나왔다는 것은 다음을 의미한다.
+
+```text
+"사용자 질문과 의미적으로 관련성이 높다."
+```
+
+하지만 다음을 의미하지는 않는다.
+
+```text
+"이 내용은 반드시 사실적으로 올바르다."
+```
+
+예를 들어 다음 문서가 동시에 존재할 수 있다.
+
+```text
+2024년 규정
+육아휴직 최대 12개월
+```
+
+```text
+2026년 규정
+육아휴직 최대 18개월
+```
+
+사용자가 육아휴직 기간을 검색하면 두 문서 모두 의미적으로 매우 관련성이 높다.
+
+따라서 RAG 품질을 높이기 위해서는 Vector Similarity 외에도 다양한 Metadata를 활용해야 한다.
+
+```text
+문서 버전
+작성일
+유효기간
+부서
+접근 권한
+문서 상태
+출처
+```
+
+즉 신뢰성 높은 RAG는 단순히 Vector Search를 구현했다고 완성되는 것이 아니다.
+
+---
+
+# 13. 사용자 질문의 Vector도 저장해야 하는가?
+
+반드시 그럴 필요는 없다.
+
+사용자 질문은 다음과 같이 사용할 수 있다.
+
+```text
+User Query
+   ↓
+Embedding 생성
+   ↓
+Vector Search
+   ↓
+검색 완료
+   ↓
+Query Vector 폐기
+```
+
+Query Embedding은 다시 생성할 수 있기 때문에 일반적으로 영속 데이터일 필요는 없다.
+
+다만 다음 요구사항이 존재한다면 저장할 수도 있다.
+
+```text
+검색 결과 재현
+유사 질문 검색
+검색 캐싱
+Embedding 비용 분석
+RAG Evaluation
+```
+
+즉 중요한 기준은 다음과 같다.
+
+> Vector가 생성되었다고 해서 무조건 저장하는 것은 아니다.
+
+---
+
+# 14. LLM의 답변 Vector도 반드시 저장하지 않는다
+
+LLM이 다음 답변을 생성했다고 가정한다.
+
+```text
+"육아휴직은 최대 1년까지 사용할 수 있습니다."
+```
+
+이 답변을 반드시 다시 Embedding해서 Vector Store에 넣을 필요는 없다.
+
+대부분의 채팅 서비스에서는 자연어 그대로 Message로 저장하면 충분하다.
+
+다만 다음과 같은 기능을 구현한다면 답변을 Embedding할 수도 있다.
+
+```text
+과거 답변의 의미 검색
+FAQ 자동 생성
+Long-term Memory
+유사 Conversation 검색
+```
+
+즉 이 역시 서비스의 요구사항에 따라 달라진다.
+
+---
+
+# 15. LLM 내부 추론 데이터를 전부 저장하는 것도 아니다
+
+AI Agent가 추론한다고 하면 내부적으로 수많은 Vector와 계산값이 만들어질 것처럼 느껴질 수 있다.
+
+실제로 모델 내부에서는 매우 많은 수치 계산이 발생한다.
+
+그러나 일반적인 애플리케이션 개발자가 다음과 같은 데이터를 전부 받아 저장하는 구조는 아니다.
+
+```text
+reasoning_vector
+thinking_vector
+inference_vector
+```
+
+대신 시스템 외부에서 관찰 가능한 실행 데이터를 저장한다.
+
+예를 들면 다음과 같다.
+
+```text
+어떤 질문이 들어왔는가
+어떤 문서를 검색했는가
+어떤 Tool을 호출했는가
+어떤 LLM을 호출했는가
+어떤 답변을 생성했는가
+얼마나 시간이 걸렸는가
+```
+
+즉 **모델 내부 계산을 저장하는 것이 아니라 Agent의 외부 행동을 추적한다.**
+
+---
+
+# 16. Conversation과 Message는 무엇인가?
+
+AI Agent 기반 대화형 서비스를 구현하면 `Conversation`과 `Message`라는 개념이 자주 등장한다.
+
+먼저 둘의 관계는 매우 단순하다.
+
+```text
+Conversation
+│
+├── Message
+├── Message
+├── Message
+└── Message
+```
+
+`Conversation`은 하나의 대화방 또는 Thread다.
+
+`Message`는 그 안에서 발생한 하나의 발언이다.
+
+---
+
+## Conversation
+
+예를 들어 사용자의 대화 목록이 다음과 같다고 가정한다.
+
+```text
+AI Agent 학습
+Spring Boot 질문
+AWS 인프라 구성
+```
+
+각각이 하나의 Conversation이다.
+
+테이블은 다음과 같이 설계할 수 있다.
+
+```text
+conversation
+
+id
+user_id
+title
+status
+created_at
+updated_at
+last_message_at
+```
+
+Conversation을 별도로 저장하는 이유는 **대화 자체에도 관리해야 할 상태와 Metadata가 있기 때문**이다.
+
+사용자의 대화 목록을 조회하거나 대화 제목을 수정하고 특정 대화를 삭제하는 등의 기능은 Message만으로 관리하기 어렵다.
+
+DDD 관점에서는 Conversation을 대화 기능의 Aggregate Root로 설계하는 것도 자연스럽다.
+
+---
+
+## Message
+
+Conversation 안에서 사용자와 AI가 주고받는 각각의 발언이 Message다.
+
+```text
+Conversation #100
+│
+├── Message #1
+│   role = USER
+│   content = "RAG가 무엇인가요?"
+│
+├── Message #2
+│   role = ASSISTANT
+│   content = "RAG는 ..."
+│
+└── Message #3
+    role = USER
+    content = "그럼 Vector는 어디에 저장하나요?"
+```
+
+일반적으로 다음과 같은 `role`이 존재할 수 있다.
+
+```text
+USER
+ASSISTANT
+SYSTEM
+TOOL
+```
+
+서비스와 사용하는 LLM API에 따라 세부 구조는 달라질 수 있다.
+
+---
+
+# 17. Message를 왜 저장해야 하는가?
+
+첫 번째 이유는 너무 당연하다.
+
+사용자가 과거 대화를 다시 확인할 수 있어야 하기 때문이다.
+
+두 번째 이유는 **이전 대화가 새로운 질문의 Context가 될 수 있기 때문**이다.
+
+다음 대화를 보자.
+
+```text
+User
+"육아휴직은 최대 몇 개월이야?"
+
+Assistant
+"18개월입니다."
+
+User
+"그럼 신청은 언제 해야 해?"
+```
+
+마지막 질문만 LLM에게 전달하면 다음 문장의 대상이 무엇인지 명확하지 않다.
+
+```text
+"그럼 신청은 언제 해야 해?"
+```
+
+따라서 이전 Message를 참고해야 한다.
+
+---
+
+# 18. 그렇다고 모든 Message를 매번 LLM에게 보내는 것은 아니다
+
+Conversation에 Message가 500개 존재한다고 가정한다.
+
+```text
+Conversation
+├── Message 1
+├── Message 2
+...
+└── Message 500
+```
+
+매번 500개의 Message를 모두 LLM에게 전달하는 것은 좋은 방법이 아닐 수 있다.
+
+LLM에는 한 번에 처리할 수 있는 Context의 크기에 제한이 존재하고, 입력량이 많아질수록 비용과 처리 시간이 증가할 수 있다.
+
+그래서 실제 LLM Context는 다음과 같이 별도로 구성할 수 있다.
+
+```text
+최근 Message
++
+오래된 Conversation Summary
++
+현재 질문과 관련된 Memory
++
+RAG Evidence
+```
+
+즉 다음 두 개를 반드시 구분해야 한다.
+
+```text
+DB에 영속 저장된 Conversation History
+≠
+현재 LLM에게 전달되는 Context
+```
+
+---
+
+# 19. Agent Run은 무엇인가?
+
+`Message`는 사용자가 보는 대화 데이터다.
+
+그러나 사용자 질문 하나를 처리하는 동안 Agent 내부에서는 여러 작업이 발생할 수 있다.
+
+예를 들어 다음 질문이 있다.
+
+```text
+"회사 육아휴직 규정을 확인하고 내 남은 사용 가능 기간도 알려줘."
+```
+
+Agent는 내부적으로 다음과 같이 동작할 수 있다.
+
+```text
+LLM 호출
+ ↓
+회사 규정 검색
+ ↓
+사용자 휴직 사용량 조회
+ ↓
+다시 LLM 호출
+ ↓
+최종 답변
+```
+
+이 전체 실행 단위를 하나로 묶는 개념을 `Agent Run`이라고 생각할 수 있다.
+
+```text
+Message #100
+      │
+      ▼
+AgentRun #500
+      │
+      ├── LlmCall
+      ├── ToolCall
+      ├── RetrievalEvent
+      └── LlmCall
+```
+
+---
+
+# 20. Agent Run을 왜 저장하는가?
+
+AI 시스템에서는 다음 질문에 답할 수 있어야 한다.
+
+```text
+왜 이런 답변이 나왔는가?
+```
+
+예를 들어 AI가 잘못된 답변을 했다.
+
+```text
+User
+"육아휴직 최대 기간이 몇 개월이야?"
+
+AI
+"60개월입니다."
+```
+
+개발자는 원인을 찾아야 한다.
+
+```text
+사용자의 질문은 무엇이었는가?
+어떤 검색 Query가 사용되었는가?
+어떤 문서를 검색했는가?
+검색 Score는 얼마였는가?
+어떤 Tool이 호출되었는가?
+어떤 LLM 모델을 사용했는가?
+최종적으로 어떤 답변이 생성되었는가?
+```
+
+Agent Run은 이러한 실행 기록을 하나로 묶는다.
+
+기존 Backend 시스템의 다음 개념과 유사하게 볼 수도 있다.
+
+```text
+request_id
+trace_id
+```
+
+즉 하나의 Agent 실행을 추적하기 위한 상위 식별자다.
+
+---
+
+# 21. LLM Call은 무엇인가?
+
+Agent Run 하나가 항상 LLM API 호출 한 번으로 끝나는 것은 아니다.
+
+다음과 같이 여러 번 호출될 수 있다.
+
+```text
+AgentRun #500
+│
+├── LlmCall #1
+│      ↓
+│   "회사 규정 검색 필요"
+│
+├── ToolCall
+│
+└── LlmCall #2
+       ↓
+    최종 답변 생성
+```
+
+따라서 하나의 Agent Run 안에 여러 개의 `LlmCall`이 존재할 수 있다.
+
+```text
+AgentRun 1 : N LlmCall
+```
+
+---
+
+## LLM Call을 왜 저장하는가?
+
+운영에서 중요한 데이터이기 때문이다.
+
+예를 들면 다음을 분석할 수 있다.
+
+```text
+사용한 모델
+입력 Token 수
+출력 Token 수
+응답 시간
+성공/실패 여부
+API Error
+비용
+```
+
+예를 들어 다음과 같은 구조가 될 수 있다.
+
+```text
+llm_call
+
+id
+agent_run_id
+model_name
+input_token_count
+output_token_count
+duration_ms
+status
+error_code
+created_at
+```
+
+다만 Prompt와 Response 전문을 무조건 저장하는 것은 신중해야 한다.
+
+Prompt나 응답에 개인정보 또는 기업 기밀이 포함될 수 있기 때문이다.
+
+따라서 실제 서비스에서는 보안, 개인정보, 보관 기간을 함께 고려해야 한다.
+
+---
+
+# 22. Tool은 무엇인가?
+
+Tool은 Agent가 사용할 수 있도록 제공된 **실행 가능한 기능**이다.
+
+예를 들면 다음과 같다.
+
+```text
+searchCompanyDocuments()
+
+getEmployeeLeaveBalance()
+
+getWeather()
+
+sendEmail()
+
+createCalendarEvent()
+```
+
+Tool이라고 해서 AI 기술이어야 하는 것은 아니다.
+
+기존 Spring Boot 애플리케이션에 존재하는 평범한 Service 메서드도 Agent가 호출할 수 있도록 노출하면 Tool이 될 수 있다.
+
+예:
+
+```java
+EmployeeLeaveBalance getLeaveBalance(Long employeeId);
+```
+
+---
+
+# 23. Tool Calling은 무엇인가?
+
+Agent에게 다음 Tool이 제공되어 있다고 가정한다.
+
+```text
+getEmployeeLeaveBalance(employeeId)
+
+설명:
+특정 직원의 남은 연차 일수를 조회한다.
+```
+
+사용자가 다음과 같이 질문한다.
+
+```text
+"내 연차 몇 개 남았어?"
+```
+
+LLM은 해당 질문에 답변하려면 사용자의 실제 데이터를 조회해야 한다고 판단할 수 있다.
+
+```text
+LLM
+ ↓
+getEmployeeLeaveBalance 호출 필요
+ ↓
+Tool Call
+ ↓
+Spring Service 실행
+ ↓
+DB 조회
+ ↓
+7일
+ ↓
+Tool Result
+ ↓
+다시 LLM
+ ↓
+"현재 남은 연차는 7일입니다."
+```
+
+이것이 Tool Calling의 기본적인 흐름이다.
+
+---
+
+# 24. Tool Call을 왜 저장하는가?
+
+Agent가 실제로 어떠한 행동을 했는지 추적해야 하기 때문이다.
+
+특히 다음과 같은 Tool은 더욱 중요하다.
+
+```text
+이메일 발송
+결제
+DB 데이터 변경
+파일 삭제
+문서 생성
+외부 시스템 호출
+```
+
+Tool Call에는 다음과 같은 데이터를 저장할 수 있다.
+
+```text
+tool_name
+input
+output
+status
+duration_ms
+error
+```
+
+다만 Input/Output 전체 저장 역시 개인정보와 민감정보를 고려해야 한다.
+
+---
+
+# 25. Retrieval Event란 무엇인가?
+
+`RetrievalEvent`는 **Knowledge 검색이 한 번 발생했다는 실행 기록**이다.
+
+예를 들어 다음과 같다.
+
+```text
+query
+"육아휴직 최대 사용 기간"
+
+top_k
+5
+
+search_type
+VECTOR
+
+duration_ms
+31
+```
+
+그리고 검색 결과는 별도의 `RetrievalHit`으로 관리할 수 있다.
+
+```text
+RetrievalEvent #100
+│
+├── RetrievalHit #1
+│   chunk_id = 31
+│   rank = 1
+│   score = ...
+│
+├── RetrievalHit #2
+│   chunk_id = 72
+│   rank = 2
+│   score = ...
+│
+└── RetrievalHit #3
+    chunk_id = 105
+    rank = 3
+    score = ...
+```
+
+---
+
+# 26. Retrieval 결과는 LLM에게 전달하기 위해 DB에 저장하는가?
+
+일반적으로는 아니다.
+
+이 부분은 반드시 구분할 필요가 있다.
+
+검색된 Chunk가 Spring Boot 애플리케이션 내부에 다음과 같이 존재한다고 하자.
+
+```java
+List<DocumentChunk> evidence;
+```
+
+이 데이터를 바로 Prompt Builder에 전달할 수 있다.
+
+```text
+Vector Search
+      │
+      ├───────────────▶ LLM Context
+      │
+      └───────────────▶ Retrieval Trace 저장
+```
+
+즉 일반적으로 다음처럼 하지 않는다.
+
+```text
+Retrieval
+ ↓
+RDB INSERT
+ ↓
+다시 SELECT
+ ↓
+LLM 전달
+```
+
+검색 결과는 현재 Agent 실행의 메모리에 존재하고 곧바로 다음 LLM 호출에 사용할 수 있다.
+
+DB에 남기는 RetrievalEvent와 RetrievalHit은 **다른 목적**이다.
+
+---
+
+# 27. Retrieval Event를 저장하는 진짜 이유
+
+주된 목적은 다음과 같다.
+
+```text
+디버깅
+RAG 품질 분석
+재현
+Evaluation
+감사
+```
+
+예를 들어 AI의 답변이 틀렸다고 가정한다.
+
+개발자는 두 가지를 구분해야 한다.
+
+```text
+1. 검색부터 잘못됐는가?
+
+2. 검색은 정확했는데 LLM이 잘못 답했는가?
+```
+
+예를 들어 Retrieval 결과가 다음과 같다면:
+
+```text
+Evidence
+"육아휴직은 최대 18개월이다."
+```
+
+그런데 LLM이:
+
+```text
+"육아휴직은 최대 12개월입니다."
+```
+
+라고 답했다면 Retrieval보다 Generation 단계의 문제일 가능성이 높다.
+
+반대로 검색 결과부터 오래된 문서만 가져왔다면 Retrieval 문제다.
+
+이 차이를 분석하려면 검색 과정이 기록되어 있어야 한다.
+
+---
+
+# 28. RetrievalHit에 원문 전체를 저장해야 하는가?
+
+항상 그럴 필요는 없다.
+
+이미 `document_chunk` 테이블에 원문이 존재한다면 다음 정도만 저장해도 된다.
+
+```text
+retrieval_hit
+
+retrieval_event_id
+document_chunk_id
+rank
+score
+```
+
+`document_chunk_id`를 통해 검색 당시 어떤 문서가 선택되었는지 확인할 수 있기 때문이다.
+
+다만 정확한 Audit 또는 재현이 중요하다면 Snapshot을 저장할 수도 있다.
+
+```text
+document_chunk_id
+content_snapshot
+document_version
+rank
+score
+```
+
+이유는 원본 Chunk가 나중에 변경될 수 있기 때문이다.
+
+따라서 Snapshot 저장 여부 역시 서비스 요구사항에 따라 결정해야 한다.
+
+---
+
+# 29. Retrieval과 Tool은 같은 개념인가?
+
+둘은 다른 개념이다.
+
+```text
+Retrieval
+=
+Knowledge를 검색하는 행위
+```
+
+```text
+Tool
+=
+Agent가 실행할 수 있도록 제공된 기능
+```
+
+다만 둘이 연결될 수 있다.
+
+예를 들어 다음과 같은 Tool을 만들 수 있다.
+
+```text
+searchCompanyDocuments(query)
+```
+
+이 Tool 내부에서 실제 Vector Search를 수행할 수 있다.
+
+```text
+ToolCall
+    ↓
+searchCompanyDocuments()
+    ↓
+Embedding
+    ↓
+Vector Search
+    ↓
+Retrieval
+```
+
+따라서 다음 관계가 가능하다.
+
+```text
+ToolCall
+   └── RetrievalEvent
+```
+
+그러나 Retrieval이 항상 Tool을 통해 발생하는 것은 아니다.
+
+---
+
+# 30. 일반 RAG에서는 Tool이 없어도 검색할 수 있다
+
+예를 들어 Spring Boot 코드가 모든 질문에 대해 자동으로 RAG를 수행하도록 만들 수 있다.
+
+```text
+User Question
+    ↓
+Spring Boot
+    ↓
+RAG Retrieval
+    ↓
+LLM
+    ↓
+Answer
+```
+
+이 경우:
+
+```text
+RetrievalEvent = 존재
+
+ToolCall = 존재하지 않음
+```
+
+LLM이 검색 여부를 판단한 것이 아니라 애플리케이션 Pipeline 자체가 항상 검색하도록 설계되어 있기 때문이다.
+
+---
+
+# 31. Agentic RAG에서는 Tool을 통해 검색할 수 있다
+
+이번에는 Agent에게 다음 Tool을 제공한다.
+
+```text
+searchCompanyDocuments(query)
+```
+
+사용자:
+
+```text
+"우리 회사 육아휴직 규정이 어떻게 돼?"
+```
+
+LLM:
+
+```text
+"회사 내부 문서를 검색해야 한다."
+```
+
+Tool 실행:
+
+```text
+searchCompanyDocuments(
+    "육아휴직 규정 최대 기간"
+)
+```
+
+그리고 Tool 내부에서 Retrieval이 발생한다.
+
+```text
+AgentRun
+│
+├── LlmCall
+│
+├── ToolCall
+│      └── RetrievalEvent
+│             ├── RetrievalHit
+│             └── RetrievalHit
+│
+└── LlmCall
+```
+
+이것이 일반적인 RAG와 Agentic RAG의 중요한 차이 중 하나다.
+
+---
+
+# 32. Agent Loop란 무엇인가?
+
+일반적인 RAG는 비교적 직선적인 흐름이다.
+
+```text
+Question
+ ↓
+Retrieve
+ ↓
+LLM
+ ↓
+Answer
+```
+
+반면 Agent는 다음 행동을 반복적으로 판단할 수 있다.
+
+```text
+현재 상태
+   ↓
+LLM 판단
+   ↓
+추가 행동이 필요한가?
+   │
+   ├── YES
+   │    ↓
+   │   Tool 실행
+   │    ↓
+   │   Tool Result
+   │    ↓
+   │   다시 LLM 판단
+   │
+   └── NO
+        ↓
+     Final Answer
+```
+
+이러한 반복 구조를 `Agent Loop`라고 볼 수 있다.
+
+---
+
+# 33. 실제 Agent Loop 예시
+
+사용자가 다음과 같이 질문한다.
+
+```text
+"우리 회사 육아휴직 규정을 확인하고,
+내가 앞으로 얼마나 더 사용할 수 있는지도 알려줘."
+```
+
+LLM은 먼저 필요한 정보를 판단한다.
+
+```text
+필요한 정보
+
+1. 회사 육아휴직 최대 허용 기간
+2. 사용자가 이미 사용한 육아휴직 기간
+```
+
+첫 번째 Tool을 호출한다.
+
+```text
+searchCompanyPolicy("육아휴직")
+```
+
+결과:
+
+```text
+최대 18개월
+```
+
+두 번째 Tool을 호출한다.
+
+```text
+getUserParentalLeaveUsage(userId)
+```
+
+결과:
+
+```text
+6개월 사용
+```
+
+현재 Agent Context에는 이제 다음 정보가 있다.
+
+```text
+회사 최대 허용 기간 = 18개월
+
+사용 기간 = 6개월
+```
+
+다시 LLM에게 전달한다.
+
+```text
+LLM
+ ↓
+"앞으로 12개월 추가 사용 가능합니다."
+```
+
+하나의 Agent Run 안에서 다음과 같은 실행이 발생한 것이다.
+
+```text
+AgentRun
+│
+├── LlmCall #1
+│
+├── ToolCall #1
+│      └── RetrievalEvent
+│
+├── ToolCall #2
+│
+└── LlmCall #2
+```
+
+---
+
+# 34. Agent State란 무엇인가?
+
+Agent Loop가 실행되는 동안에는 현재 진행 상황을 기억하고 있어야 한다.
+
+예를 들어:
+
+```text
+현재 사용자 질문
+현재까지 확보한 Evidence
+Tool Result
+현재 Step
+이미 실행한 Tool
+남아 있는 작업
+```
+
+이러한 현재 실행 상태를 `Agent State`라고 부를 수 있다.
+
+단순한 Agent라면 Java 애플리케이션 메모리에만 유지해도 된다.
+
+```text
+Java Heap
+```
+
+하지만 실행이 길어지거나 서버 재시작 이후에도 이어서 실행해야 한다면 외부 저장소가 필요할 수 있다.
+
+```text
+Redis
+RDB
+Workflow Engine
+```
+
+즉 Agent State도 무조건 RDB에 저장하는 것은 아니다.
+
+Agent의 생명주기와 장애 복구 요구사항에 따라 결정한다.
+
+---
+
+# 35. Memory는 Conversation History와도 다르다
+
+Conversation은 특정 대화방의 전체 기록이다.
+
+```text
+Conversation
+├── Message
+├── Message
+└── Message
+```
+
+Memory는 과거 정보 중에서 이후 Agent 실행에 다시 활용하고 싶은 정보를 의미할 수 있다.
+
+예를 들어:
+
+```text
+"사용자는 Java Backend 개발자다."
+```
+
+라는 정보가 여러 Conversation에서 반복해서 유용하다면 장기 Memory로 관리할 수 있다.
+
+---
+
+# 36. Memory를 반드시 Vector DB에 저장해야 하는 것은 아니다
+
+Memory의 성격에 따라 저장소가 달라질 수 있다.
+
+구조화 가능한 정보라면 RDB가 더 적합할 수 있다.
+
+```text
+preferred_language = Korean
+preferred_stack = Spring Boot
+```
+
+반면 자연어 형태의 수많은 Memory 중 현재 질문과 관련된 정보만 의미 기반으로 검색해야 한다면 Embedding + Vector Search가 유용할 수 있다.
+
+```text
+Memory Text
+ ↓
+Embedding
+ ↓
+Vector Store
+```
+
+따라서 다음 공식은 잘못된 이해다.
+
+```text
+Memory = Vector DB
+```
+
+Memory는 논리적 개념이고 Vector DB는 그것을 구현할 수 있는 여러 방법 중 하나다.
+
+---
+
+# 37. LLM API란 무엇인가?
+
+Spring Boot 애플리케이션 안에 거대한 LLM 자체가 들어 있는 경우만 있는 것은 아니다.
+
+일반적인 애플리케이션에서는 외부 LLM Provider가 제공하는 API를 호출한다.
+
+```text
+Spring Boot
+    │
+    │ HTTP Request
+    ▼
+LLM Provider
+    │
+    ▼
+   LLM
+    │
+    ▼
+HTTP Response
+    │
+    ▼
+Spring Boot
+```
+
+Spring Boot 코드에서는 개념적으로 다음과 같이 사용할 수 있다.
+
+```java
+String answer = llmClient.generate(prompt);
+```
+
+실제로는 SDK나 HTTP Client 등을 사용하여 외부 LLM API를 호출하게 된다.
+
+LLM API를 사용하는 목적은 다양하다.
+
+```text
+자연어 이해
+답변 생성
+요약
+분류
+정보 추출
+Tool 선택
+검색 Query 재작성
+```
+
+RAG에서는 일반적으로 검색된 Evidence를 읽고 사용자 질문에 맞는 답변을 생성하는 역할을 맡는다.
+
+---
+
+# 38. Embedding API와 LLM API도 역할이 다르다
+
+둘 다 AI Model을 호출하지만 목적은 다르다.
+
+```text
+Embedding API
+
+Text
+ ↓
+Embedding Model
+ ↓
+Vector
+```
+
+```text
+LLM API
+
+Text + Context
+ ↓
+LLM
+ ↓
+Text / Tool Decision
+```
+
+RAG에서는 둘을 함께 사용하는 경우가 많다.
+
+```text
+User Question
+     │
+     ▼
+Embedding API
+     │
+     ▼
+Query Vector
+     │
+     ▼
+Vector Search
+     │
+     ▼
+Evidence
+     │
+     ▼
+LLM API
+     │
+     ▼
+Answer
+```
+
+---
+
+# 39. OpenSearch는 무엇인가?
+
+OpenSearch는 기본적으로 검색 시스템이다.
+
+다음과 같은 기능에 강점을 가진다.
+
+```text
+Full Text Search
+Keyword Search
+Filtering
+Aggregation
+Vector Search
+```
+
+예를 들어 사용자가 다음 값을 검색한다고 가정한다.
+
+```text
+ERROR-3921
+```
+
+Vector Search는 의미 검색에는 뛰어나지만 `ERROR-3921`처럼 정확한 Keyword를 찾는 경우에는 전통적인 Keyword Search가 매우 중요하다.
+
+그래서 실제 RAG에서는 다음과 같이 두 방식을 함께 사용하는 경우가 있다.
+
+```text
+Keyword Search
++
+Vector Search
+=
+Hybrid Search
+```
+
+OpenSearch는 이러한 검색 시스템을 구축할 때 선택할 수 있는 기술 중 하나다.
+
+---
+
+# 40. Qdrant는 무엇인가?
+
+Qdrant는 Vector Search에 특화된 Vector Database 계열의 시스템이다.
+
+개념적으로 다음과 같이 저장할 수 있다.
+
+```text
+Vector
+[0.18, 0.42, ...]
+
+Payload
+document_id = 100
+department = HR
+year = 2026
+```
+
+Vector Similarity Search를 전문적으로 수행하는 데 초점을 둔다.
+
+---
+
+# 41. PostgreSQL + pgvector, Qdrant, OpenSearch는 어떻게 다른가?
+
+초기 학습 단계에서는 다음 정도로 이해하면 충분하다.
+
+| 기술                    | 성격              | 특징                                          |
+| --------------------- | --------------- | ------------------------------------------- |
+| PostgreSQL + pgvector | RDB + Vector 기능 | 기존 비즈니스 데이터와 Vector를 함께 관리하기 쉬움             |
+| Qdrant                | Vector DB       | Vector Search에 특화                           |
+| OpenSearch            | Search Engine   | Keyword, Full-text, Filter, Vector를 조합하기 좋음 |
+
+처음부터 세 가지를 모두 사용할 필요는 없다.
+
+Spring Boot 기반으로 RDB 경험이 있다면 먼저 다음 구성을 학습하는 것이 이해하기 쉽다.
+
+```text
+PostgreSQL
++
+pgvector
+```
+
+Vector Search가 무엇인지 직접 경험한 뒤 Qdrant와 OpenSearch가 어떤 문제를 해결하는지를 공부하는 편이 좋다.
+
+---
+
+# 42. AI Agent 데이터를 물리적으로 어디에 저장할 것인가?
+
+이제 처음 질문으로 돌아가 보자.
+
+AI Agent에서 만들어지는 데이터를 전부 하나의 DB에 넣는 것이 아니라, 데이터의 성격에 따라 저장소를 선택한다.
+
+초기 시스템이라면 다음 정도로 시작할 수 있다.
+
+```text
+                   Spring Boot
+                        │
+          ┌─────────────┼─────────────┐
+          │             │             │
+          ▼             ▼             ▼
+    PostgreSQL         S3         LLM/Embedding API
+    + pgvector
+          │
+          ├── User
+          ├── Conversation
+          ├── Message
+          ├── Document Metadata
+          ├── DocumentChunk
+          ├── Embedding
+          ├── AgentRun
+          ├── RetrievalEvent
+          ├── RetrievalHit
+          ├── ToolCall
+          └── LlmCall
+```
+
+이 정도만으로도 상당히 많은 RAG/Agent 기능을 구현할 수 있다.
+
+---
+
+# 43. 어떤 데이터를 왜 저장하는가?
+
+전체 내용을 표로 정리하면 다음과 같다.
+
+| 데이터               | 저장 위치                    | 저장하는 이유                      |
+| ----------------- | ------------------------ | ---------------------------- |
+| 원본 PDF, 이미지       | S3/Object Storage        | 원본 Knowledge 보존              |
+| Document Metadata | RDB                      | 문서 상태, 버전, 소유권 관리            |
+| Chunk Text        | RDB 또는 Vector Store      | RAG가 실제 Evidence로 사용하는 검색 단위 |
+| Chunk Embedding   | pgvector/Vector Store    | 의미 기반 검색을 빠르게 수행             |
+| Query Embedding   | 일반적으로 미저장                | 검색 이후 재생성이 쉬움                |
+| LLM Answer        | Message/RDB              | 사용자에게 과거 대화를 제공              |
+| Answer Embedding  | 요구사항에 따라                 | 유사 답변/Memory 검색 등에 사용        |
+| Conversation      | RDB                      | 대화방 단위 관리                    |
+| Message           | RDB                      | 대화 History와 Context 관리       |
+| AgentRun          | RDB/Trace Store          | 하나의 Agent 실행 전체 추적           |
+| LlmCall           | RDB/Trace Store          | 비용, Token, Latency 분석        |
+| ToolCall          | RDB/Trace Store          | Agent가 수행한 행동 추적             |
+| RetrievalEvent    | RDB/Trace Store          | 검색 품질과 실행 과정 분석              |
+| RetrievalHit      | RDB/Trace Store          | 실제 사용된 Evidence 재현           |
+| Agent State       | Memory/Redis/RDB         | 실행 중 상태 유지 및 필요 시 복구         |
+| Application Log   | Log/Observability System | 장애 및 성능 분석                   |
+| 모델 내부 계산값         | 일반적으로 저장하지 않음            | 애플리케이션이 관리할 데이터가 아님          |
+
+---
+
+# 44. 데이터는 Source Data와 Derived Data로도 구분할 수 있다
+
+저장 여부를 판단할 때 가장 유용한 기준 중 하나다.
+
+예를 들어:
+
+```text
+Original PDF
+```
+
+는 원본이다.
+
+그 PDF에서 만들어진:
+
+```text
+Chunk
+Embedding
+```
+
+은 파생 데이터다.
+
+```text
+Original Document
+       │
+       ▼
+     Chunk
+       │
+       ▼
+   Embedding
+```
+
+원본은 Source of Truth이므로 높은 우선순위로 보존해야 한다.
+
+반면 Embedding은 필요하다면 다시 생성할 수 있다.
+
+다만 다시 계산하는 비용이 크기 때문에 저장하는 것이다.
+
+이 관점은 기존 Backend 시스템에서도 익숙한 개념이다.
+
+```text
+Source of Truth
+Derived Data
+Cache
+Materialized Data
+```
+
+AI 시스템이라고 완전히 새로운 원칙이 적용되는 것은 아니다.
+
+---
+
+# 45. 데이터를 저장할지 판단하는 기준
+
+새로운 데이터가 등장할 때마다 다음 질문을 해보는 것이 좋다.
+
+### 1. 원본 데이터인가?
+
+원본이라면 보존 중요도가 높다.
+
+```text
+PDF
+사용자 입력
+결제 정보
+```
+
+### 2. 다시 생성할 수 있는가?
+
+```text
+Embedding
+Query Vector
+Summary
+```
+
+처럼 다시 생성 가능한 데이터라면 재생성 비용과 사용 빈도를 따져본다.
+
+### 3. 사용자 기능에서 다시 조회해야 하는가?
+
+Conversation과 Message처럼 사용자가 다시 확인해야 한다면 영속 저장해야 한다.
+
+### 4. 장애 이후에도 필요한가?
+
+장시간 Agent가 실행되는 시스템에서 서버 장애 후에도 작업을 이어야 한다면 Agent State를 영속화해야 할 수 있다.
+
+### 5. 운영과 디버깅에 필요한가?
+
+RetrievalEvent, ToolCall, LlmCall 같은 데이터는 서비스 기능보다 운영 목적이 강하다.
+
+### 6. 개인정보 또는 민감 데이터가 포함되어 있는가?
+
+Prompt와 Tool Result를 무조건 저장하면 안 된다.
+
+### 7. 얼마나 오래 보관해야 하는가?
+
+모든 실행 Trace를 영원히 저장하는 것도 좋은 설계가 아니다.
+
+---
+
+# 46. Log와 RDB도 목적이 다르다
+
+Agent 실행 기록을 모두 일반 Application Log에만 남길 수도 있고 모두 RDB에 저장할 수도 있다.
+
+하지만 목적을 구분하는 것이 좋다.
+
+RDB에 다음과 같은 구조화된 Trace를 저장하면:
+
+```text
+agent_run
+retrieval_event
+tool_call
+llm_call
+```
+
+다음과 같은 분석이 쉽다.
+
+```text
+사용자별 실행 분석
+AgentRun 단위 재구성
+검색 성공률
+비용 통계
+Tool 성공률
+```
+
+반면 Log/Observability 시스템은 다음 문제를 확인하는 데 강하다.
+
+```text
+Exception
+Latency
+Timeout
+네트워크 문제
+CPU/Memory
+분산 Trace
+```
+
+따라서 개념적으로 다음처럼 생각할 수 있다.
+
+```text
+RDB
+→ 구조화된 제품/실행 데이터
+
+Log / Observability
+→ 시스템 운영과 장애 분석
+```
+
+모든 정보를 두 저장소에 완전히 중복해서 넣을 필요는 없다.
+
+---
+
+# 47. 처음부터 저장소를 많이 나눌 필요는 없다
+
+논리적으로는 여러 데이터가 존재한다.
+
+```text
+Business Data
+Knowledge Data
+Vector Data
+Execution Data
+Cache
+```
+
+그렇다고 물리적으로 처음부터 다음을 모두 구축해야 하는 것은 아니다.
+
+```text
+PostgreSQL
+Qdrant
+OpenSearch
+Redis
+Kafka
+S3
+...
+```
+
+초기에는 다음 정도로 충분할 수 있다.
+
+```text
+PostgreSQL + pgvector
++
+S3
+```
+
+그리고 실제 요구사항이 생기면서 분리할 수 있다.
+
+```text
+Redis
+→ 빠른 임시 State/Cache 필요
+
+Qdrant
+→ Vector Search 전문 시스템 필요
+
+OpenSearch
+→ Full-text + Hybrid Search 필요
+
+별도 Observability
+→ Agent Trace 분석 고도화
+```
+
+중요한 원칙은 다음과 같다.
+
+> 논리적인 책임은 먼저 분리하고, 물리적인 저장소는 필요할 때 분리한다.
+
+---
+
+# 48. 전체 데이터 모델을 단순화하면
+
+학습 프로젝트라면 다음 테이블 정도로 시작할 수 있다.
+
+```text
+conversation
+message
+
+document
+document_chunk
+
+agent_run
+retrieval_event
+retrieval_hit
+tool_call
+llm_call
+```
+
+관계는 대략 다음과 같다.
+
+```text
+Conversation
+│
+├── Message
+├── Message
+└── Message
+
+
+Document
+│
+├── DocumentChunk
+├── DocumentChunk
+└── DocumentChunk
+
+
+AgentRun
+│
+├── LlmCall
+│
+├── ToolCall
+│      └── RetrievalEvent
+│             ├── RetrievalHit
+│             └── RetrievalHit
+│
+└── LlmCall
+```
+
+---
+
+# 49. 실제 사용자 질문 하나가 처리되는 전체 과정
+
+지금까지 내용을 하나로 합쳐보자.
+
+사용자가 다음 질문을 입력한다.
+
+```text
+"육아휴직 기간을 알려줘."
+```
+
+먼저 사용자 Message를 저장한다.
+
+```text
+Message #100
+
+role = USER
+content = "육아휴직 기간을 알려줘."
+```
+
+Agent 실행을 시작한다.
+
+```text
+AgentRun #500
+status = RUNNING
+```
+
+필요한 경우 LLM이 검색 필요성을 판단한다.
+
+```text
+LlmCall #700
+```
+
+회사 문서 검색 Tool을 호출한다.
+
+```text
+ToolCall #800
+
+tool_name = searchCompanyDocument
+```
+
+Tool 내부에서 검색이 발생한다.
+
+```text
+RetrievalEvent #900
+
+query = "육아휴직 최대 사용 기간"
+```
+
+질문을 Embedding한다.
+
+```text
+"육아휴직 최대 사용 기간"
+        ↓
+Embedding Model
+        ↓
+Query Vector
+```
+
+pgvector에서 관련 Chunk를 검색한다.
+
+```text
+Query Vector
+    ↓
+Vector Search
+    ↓
+Chunk #300
+Chunk #450
+```
+
+검색 기록을 남긴다.
+
+```text
+RetrievalHit #901
+chunk_id = 300
+rank = 1
+
+RetrievalHit #902
+chunk_id = 450
+rank = 2
+```
+
+검색된 자연어 Evidence를 현재 Agent Context에 추가한다.
+
+```text
+"육아휴직은 최대 18개월까지 사용할 수 있다."
+```
+
+다시 LLM을 호출한다.
+
+```text
+LlmCall #701
+```
+
+최종 답변이 생성된다.
+
+```text
+"회사 규정에 따르면 육아휴직은 최대 18개월까지 사용할 수 있습니다."
+```
+
+Assistant Message를 저장한다.
+
+```text
+Message #101
+
+role = ASSISTANT
+content = "회사 규정에 따르면..."
+```
+
+마지막으로 Agent Run을 완료한다.
+
+```text
+AgentRun #500
+status = COMPLETED
+```
+
+전체 관계는 다음과 같다.
+
+```text
+Conversation #10
+│
+├── Message #100
+│   USER
+│   "육아휴직 기간을 알려줘."
+│
+│      │
+│      ▼
+│   AgentRun #500
+│      │
+│      ├── LlmCall #700
+│      │
+│      ├── ToolCall #800
+│      │      │
+│      │      └── RetrievalEvent #900
+│      │              │
+│      │              ├── RetrievalHit #901
+│      │              └── RetrievalHit #902
+│      │
+│      └── LlmCall #701
+│
+└── Message #101
+    ASSISTANT
+    "회사 규정에 따르면..."
+```
+
+---
+
+# 50. Spring Boot 관점에서 보면 생각보다 익숙하다
+
+AI라는 이름을 잠시 제거하면 전체 흐름은 기존 Backend Application과 크게 다르지 않다.
+
+```text
+입력
+ ↓
+Validation
+ ↓
+DB 저장
+ ↓
+외부 API 호출
+ ↓
+검색
+ ↓
+비즈니스 데이터 조립
+ ↓
+다시 외부 API 호출
+ ↓
+결과 저장
+ ↓
+응답
+```
+
+아주 단순한 RAG 코드를 표현하면 다음과 비슷하다.
+
+```java
+public Answer ask(
+        Long conversationId,
+        String question
+) {
+
+    Message userMessage =
+            messageRepository.save(
+                    Message.user(
+                            conversationId,
+                            question
+                    )
+            );
+
+    AgentRun agentRun =
+            agentRunRepository.save(
+                    AgentRun.start(
+                            conversationId,
+                            userMessage.getId()
+                    )
+            );
+
+    float[] queryEmbedding =
+            embeddingClient.embed(question);
+
+    List<DocumentChunk> evidence =
+            documentChunkRepository.searchSimilar(
+                    queryEmbedding,
+                    5
+            );
+
+    retrievalTraceRecorder.record(
+            agentRun.getId(),
+            question,
+            evidence
+    );
+
+    String prompt =
+            promptBuilder.build(
+                    question,
+                    evidence
+            );
+
+    String response =
+            llmClient.generate(prompt);
+
+    messageRepository.save(
+            Message.assistant(
+                    conversationId,
+                    response
+            )
+    );
+
+    agentRun.complete();
+
+    return new Answer(response);
+}
+```
+
+Agent가 추가되면 여기에 판단과 반복 구조가 들어간다.
+
+```java
+while (!state.isFinished()) {
+
+    LlmDecision decision =
+            llmClient.decide(state);
+
+    if (decision.requiresTool()) {
+
+        ToolResult result =
+                toolExecutor.execute(
+                        decision.toolCall()
+                );
+
+        state.add(result);
+
+        continue;
+    }
+
+    state.finish(
+            decision.finalAnswer()
+    );
+}
+```
+
+실제 Framework 내부 구현은 훨씬 복잡할 수 있지만 핵심 개념은 크게 다르지 않다.
+
+---
+
+# 51. AI Agent에서는 왜 Observability가 특히 중요한가?
+
+기존 Backend Application은 대부분 상당 부분 결정론적이다.
+
+```text
+Input A
++
+동일한 코드
+=
+예측 가능한 Output B
+```
+
+하지만 LLM이 포함된 시스템에서는 결과가 항상 완전히 동일하다고 가정하기 어렵다.
+
+Agent가 Tool을 선택하는 과정과 검색 결과, Prompt 구성에 따라 최종 답변도 달라질 수 있다.
+
+그래서 다음 질문에 답할 수 있어야 한다.
+
+```text
+왜 이 Tool을 호출했는가?
+
+왜 이 문서를 검색했는가?
+
+왜 이 Evidence를 선택했는가?
+
+어떤 LLM을 사용했는가?
+
+왜 최종적으로 이런 답변이 나왔는가?
+```
+
+이 때문에 다음과 같은 데이터가 중요해진다.
+
+```text
+AgentRun
+LlmCall
+ToolCall
+RetrievalEvent
+RetrievalHit
+```
+
+AI Agent 시스템의 데이터 설계에서 **비즈니스 데이터뿐 아니라 실행 과정 자체도 중요한 데이터**라는 점이 기존 일반적인 CRUD 서비스와 조금 다른 부분이다.
+
+---
+
+# 52. 그렇다고 모든 데이터를 영원히 저장하면 안 된다
+
+Agent 시스템은 실행 데이터가 빠르게 증가할 수 있다.
+
+예를 들어 하나의 요청에서 다음 데이터가 발생한다고 가정한다.
+
+```text
+AgentRun 1개
+LlmCall 3개
+ToolCall 2개
+RetrievalEvent 2개
+RetrievalHit 10개
+```
+
+하루 요청이 수십만 건이라면 Trace 데이터 규모 역시 매우 커진다.
+
+따라서 데이터마다 보관 정책을 설계해야 한다.
+
+예를 들면 다음과 같다.
+
+```text
+Conversation / Message
+→ 서비스 정책에 따라 장기 보관
+
+AgentRun Metadata
+→ 장기 또는 중기 보관
+
+Detailed Trace
+→ 30일
+
+Debug Log
+→ 7일
+
+Archived Trace
+→ Object Storage 이동
+```
+
+이를 `Retention Policy` 관점에서 설계할 수 있다.
+
+---
+
+# 53. 지금 단계에서는 어디까지 구현하는 것이 좋은가?
+
+AI Agent를 처음 공부한다면 곧바로 복잡한 Agent Framework부터 시작하지 않는 편이 좋다고 생각한다.
+
+먼저 가장 기본적인 RAG Pipeline을 직접 구현해보는 것이 좋다.
+
+```text
+1. PDF 업로드
+
+2. Object Storage 저장
+
+3. Document Metadata 저장
+
+4. PDF Parsing
+
+5. Chunking
+
+6. Embedding API 호출
+
+7. pgvector 저장
+
+8. 사용자 자연어 질문
+
+9. Query Embedding
+
+10. Vector Similarity Search
+
+11. Top-K Evidence 확보
+
+12. LLM API 호출
+
+13. Answer 생성
+```
+
+여기까지 구현하면 다음 개념들이 자연스럽게 연결된다.
+
+```text
+Embedding
+Vector
+Vector Store
+RAG
+Context
+Evidence
+LLM API
+```
+
+그 다음 Conversation과 Message를 추가한다.
+
+```text
+Conversation
+Message
+```
+
+그 이후 실행 Trace를 추가한다.
+
+```text
+AgentRun
+RetrievalEvent
+RetrievalHit
+LlmCall
+```
+
+마지막으로 Tool Calling과 Agent Loop를 추가하는 순서가 이해하기 쉽다.
+
+```text
+Tool
+Tool Calling
+Agent State
+Agent Loop
+Memory
+```
+
+---
+
+# 54. 전체 흐름 다시 보기
+
+문서를 저장하는 과정은 다음과 같다.
+
+```text
+                [Document]
+                    │
+                 Parsing
+                    │
+                 Chunking
+                    │
+                    ▼
+                 [Chunk]
+                    │
+                Embedding
+                    │
+                    ▼
+                 [Vector]
+                    │
+                    ▼
+          PostgreSQL + pgvector
+```
+
+질문을 처리하는 과정은 다음과 같다.
+
+```text
+                User Query
+                    │
+                Embedding
+                    │
+                    ▼
+               Query Vector
+                    │
+                    ▼
+               Vector Search
+                    │
+                    ▼
+                 Evidence
+                    │
+                    ▼
+                   LLM
+                    │
+                    ▼
+                  Answer
+```
+
+Agent의 실행까지 추가하면 다음과 같다.
+
+```text
+Conversation
+│
+├── Message(User)
+│
+│      │
+│      ▼
+│   AgentRun
+│      │
+│      ├── LlmCall
+│      │
+│      ├── ToolCall
+│      │      │
+│      │      └── RetrievalEvent
+│      │              │
+│      │              └── RetrievalHit
+│      │
+│      └── LlmCall
+│
+└── Message(Assistant)
+```
+
+그리고 물리적 저장소를 연결하면 다음과 같이 정리할 수 있다.
+
+```text
+S3 / Object Storage
+→ 원본 파일
+
+
+PostgreSQL
+→ 비즈니스 데이터
+→ Conversation
+→ Message
+→ Document Metadata
+→ Agent 실행 Trace
+
+
+pgvector
+→ Embedding Vector
+→ Vector Similarity Search
+
+
+Redis
+→ 필요한 경우 실행 중 임시 State
+→ Cache
+
+
+Log / Observability System
+→ 장애
+→ 성능
+→ Distributed Trace
+```
+
+---
+
+# 마무리
+
+처음 AI Agent를 접했을 때 가장 혼란스러웠던 부분은 **AI가 추론하는 동안 만들어지는 모든 데이터가 어디엔가 계속 저장되어야 할 것 같다는 생각**이었다.
+
+하지만 실제로는 그렇지 않았다.
+
+중요한 것은 데이터의 성격을 구분하는 것이다.
+
+```text
+원본인가?
+파생 데이터인가?
+사용자가 다시 조회해야 하는가?
+다시 생성할 수 있는가?
+운영과 디버깅에 필요한가?
+실행 중에만 필요한가?
+보안상 저장해도 되는가?
+```
+
+이 기준으로 보면 각 데이터의 역할이 조금씩 명확해진다.
+
+원본 PDF는 Knowledge의 Source of Truth이므로 보존한다.
+
+Chunk와 Embedding은 검색을 위한 파생 데이터이므로 재생성 가능하지만 성능과 비용 때문에 저장한다.
+
+Query Vector는 대부분 일회성이므로 굳이 저장하지 않아도 된다.
+
+Conversation과 Message는 서비스의 실제 대화 데이터이므로 RDB에 저장한다.
+
+AgentRun, ToolCall, RetrievalEvent, LlmCall은 최종 답변 자체보다 **왜 그런 답변이 만들어졌는지를 추적하기 위해 저장한다.**
+
+그리고 LLM 내부에서 수행되는 모든 수치 연산과 추론 데이터를 우리가 직접 저장할 필요는 없다.
+
+결국 AI Agent 역시 하나의 Backend Application이다.
+
+기존 Backend에서 중요했던 다음 원칙들은 여전히 중요하다.
+
+```text
+Source of Truth
+데이터 정합성
+책임 분리
+트랜잭션
+캐싱
+Observability
+보안
+데이터 Lifecycle
+Retention Policy
+```
+
+다만 여기에 새로운 구성요소가 추가되었다.
+
+```text
+LLM
+Embedding
+Vector Search
+RAG
+Tool Calling
+Agent Loop
+Memory
+```
+
+따라서 AI Agent를 완전히 새로운 세계라고 생각하기보다는,
+
+> **기존 Backend Architecture 위에 확률적이고 자연어를 이해하는 LLM이라는 새로운 컴포넌트가 추가되고, 그 주변에 검색과 실행을 연결하는 구조가 생겼다**
+
+라고 이해하는 것이 현재로서는 가장 자연스럽다.
+
+앞으로는 이 전체 구조를 기준점으로 삼고 `Chunking`, `Embedding`, `Vector Search`, `RAG`, `Tool Calling`, `Memory`, `Agent State`를 하나씩 더 깊게 학습해보고자 한다.
