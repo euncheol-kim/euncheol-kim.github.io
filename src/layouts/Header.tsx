@@ -21,7 +21,7 @@ const navList = [
 const localePathList = ['/about'];
 
 export const Header = () => {
-  const { ref, marginTop } = useSpyElem(65);
+  const { ref, marginTop } = useSpyElem(53);
   const pathname = usePathname();
   const isLocalePath = localePathList.some((path) => pathname.startsWith(path));
   const { setIsOpen } = useSearch();
@@ -32,7 +32,7 @@ export const Header = () => {
       ref={ref}
       className='fixed z-40 flex w-full flex-col items-center justify-center border-b bg-background shadow-sm print:hidden'
     >
-      <div className='mt-1 flex h-[40px] w-full max-w-[1200px] items-center justify-between px-4 max-sm:pb-1 sm:h-[64px]'>
+      <div className='mt-1 flex h-[40px] w-full max-w-[1200px] items-center justify-between px-4 max-sm:pb-1 sm:h-[48px]'>
         <div className='flex items-center font-medium'>
           {navList.map((navItem) => (
             <Link

@@ -46,7 +46,7 @@ export default async function RootLayout({
           <SearchProviderClient posts={searchPosts}>
             <Header />
             <SearchDialog />
-            <main className='mt-[40px] flex flex-1 flex-col sm:mt-[64px]'>{children}</main>
+            <main className='mt-[40px] flex flex-1 flex-col sm:mt-[48px]'>{children}</main>
             <Footer />
           </SearchProviderClient>
         </ThemeProvider>
