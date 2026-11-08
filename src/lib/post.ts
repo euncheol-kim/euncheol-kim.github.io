@@ -1,4 +1,4 @@
-import { CATEGORY_GROUP_NAMES } from '@/config/category';
+import { CATEGORY_GROUP_NAMES, CATEGORY_PUBLIC_NAMES } from '@/config/category';
 import { CategoryDetail, CategoryGroupDetail, HeadingItem, Post, PostMatter, SearchablePost } from '@/config/types';
 import dayjs from 'dayjs';
 import fs from 'fs';
@@ -67,6 +67,7 @@ const parsePostDetail = async (postPath: string) => {
 
 // category folder name을 public name으로 변경 : dir_name -> Dir Name
 export const getCategoryPublicName = (dirPath: string) =>
+  CATEGORY_PUBLIC_NAMES[dirPath] ??
   dirPath
     .split('_')
     .map((token) => token[0].toUpperCase() + token.slice(1, token.length))

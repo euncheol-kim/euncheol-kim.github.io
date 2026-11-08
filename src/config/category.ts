@@ -10,3 +10,8 @@ export const CATEGORY_GROUP_NAMES: Record<string, string> = {
   skill_sheet: 'Skill Sheet',
   etc: 'Etc',
 };
+
+// 하위 카테고리 표시 이름. 폴더명으로 만든 이름(dir_name -> Dir Name)이 어색할 때만 지정한다.
+export const CATEGORY_PUBLIC_NAMES: Record<string, string> = {
+  fast_api: 'Fast API',
+};
