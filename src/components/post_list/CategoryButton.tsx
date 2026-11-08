@@ -15,7 +15,8 @@ export const CategoryButton = ({ isCurrent, displayName, href, count, variant = 
   return (
     <li>
       <Button asChild size='xs' variant={isCurrent ? 'default' : variant}>
-        <Link href={href}>
+        {/* 카테고리 이동 시 맨 위로 스크롤되면 상단 추천 게시물이 클릭 위치로 올라와 잘못 눌리므로 스크롤을 유지한다 */}
+        <Link href={href} scroll={false}>
           {displayName}{' '}
           <span
             className={cn('ml-1 text-xs', isCurrent ? 'text-background' : 'text-muted-foreground')}

@@ -3,15 +3,6 @@
 import { useRouter } from 'next/navigation';
 
 import { CategoryButton } from './CategoryButton';
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { CategoryGroupDetail } from '@/config/types';
 
 interface CategoryListProps {
@@ -43,11 +34,13 @@ const CategoryList = ({
 
   const onCategoryChange = (value: string) => {
     if (value === 'all') {
-      router.push('/blog');
+      router.push('/blog', { scroll: false });
+    } else if (value === 'hot') {
+      router.push('/blog/hot', { scroll: false });
     } else if (value.startsWith(GROUP_VALUE_PREFIX)) {
-      router.push(`/blog/group/${value.replace(GROUP_VALUE_PREFIX, '')}`);
+      router.push(`/blog/group/${value.replace(GROUP_VALUE_PREFIX, '')}`, { scroll: false });
     } else {
-      router.push(`/blog/${value}`);
+      router.push(`/blog/${value}`, { scroll: false });
     }
   };
 
@@ -97,29 +90,30 @@ const CategoryList = ({
         )}
       </section>
       <section className='sm:hidden'>
-        <Select onValueChange={onCategoryChange} defaultValue={selectValue}>
-          <SelectTrigger className='h-auto w-[220px] py-1.5 text-sm'>
-            <SelectValue placeholder='Theme' />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value='all' className='text-sm sm:text-base'>
-              All ({allPostCount})
-            </SelectItem>
-            {categoryGroupList.map((group) => (
-              <SelectGroup key={group.id}>
-                <SelectLabel className='text-xs text-muted-foreground'>{group.name}</SelectLabel>
-                <SelectItem value={`${GROUP_VALUE_PREFIX}${group.id}`} className='text-sm'>
-                  {group.name} 전체 ({group.count})
-                </SelectItem>
-                {group.children.map((cg) => (
-                  <SelectItem key={cg.dirName} value={cg.dirName} className='pl-12 text-sm'>
-                    {cg.publicName} ({cg.count})
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* 모바일은 네이티브 select를 사용한다.
+            커스텀 드롭다운은 목록이 상단 추천 게시물 위를 덮고, 터치로 항목을 고르면
+            닫힌 직후의 click 이벤트가 아래 게시글 링크로 전달되어 잘못 이동하는 문제가 있었다. */}
+        <select
+          value={selectValue}
+          onChange={(e) => onCategoryChange(e.target.value)}
+          aria-label='카테고리 선택'
+          className='h-9 w-[240px] rounded-md border border-input bg-card px-3 text-sm font-medium'
+        >
+          <option value='all'>All ({allPostCount})</option>
+          <option value='hot'>🔥추천 ({hotPostCount})</option>
+          {categoryGroupList.map((group) => (
+            <optgroup key={group.id} label={group.name}>
+              <option value={`${GROUP_VALUE_PREFIX}${group.id}`}>
+                {group.name} 전체 ({group.count})
+              </option>
+              {group.children.map((cg) => (
+                <option key={cg.dirName} value={cg.dirName}>
+                  {cg.publicName} ({cg.count})
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
       </section>
     </>
   );
