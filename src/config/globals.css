@@ -21,11 +21,12 @@
   --white: #e8e8e8;
   --black: #121212;
 
-  --background: #f3f7f3;
-  --foreground: var(--black);
+  /* 라이트 모드: 중성 쿨그레이 배경 위에 흰 카드를 띄워 대비를 높인다 */
+  --background: #f4f5f7;
+  --foreground: #111827;
 
-  --secondary: hsl(140 26% 88%);
-  --secondary-foreground: hsl(150 25% 18%);
+  --secondary: hsl(220 14% 92%);
+  --secondary-foreground: hsl(222 30% 18%);
 
   --informative: #e0f2fe;
   --informative-foreground: #0c4a6e;
@@ -36,24 +37,24 @@
   --destructive: #fecdd3;
   --destructive-foreground: #881337;
 
-  --card: 140 33% 99%;
-  --card-foreground: 150 30% 12%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 39% 11%;
 
-  --popover: 140 33% 99%;
-  --popover-foreground: 150 30% 12%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 39% 11%;
 
-  --primary: 150 24% 16%;
-  --primary-foreground: 145 30% 97%;
+  --primary: 222 47% 11%;
+  --primary-foreground: 210 40% 98%;
 
-  --muted: 140 22% 94%;
-  --muted-foreground: 150 12% 36%;
+  --muted: 220 14% 94%;
+  --muted-foreground: 220 9% 38%;
 
-  --accent: 140 22% 92%;
-  --accent-foreground: 150 22% 18%;
+  --accent: 220 14% 92%;
+  --accent-foreground: 222 30% 18%;
 
-  --border: 140 20% 86%;
-  --input: 140 20% 86%;
-  --ring: 150 24% 16%;
+  --border: 220 13% 85%;
+  --input: 220 13% 85%;
+  --ring: 222 47% 11%;
 
   --radius: 0.5rem;
 }

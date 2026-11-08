@@ -19,7 +19,7 @@ const PostCard = ({ post, compact = false }: Props) => {
       <li
         className={cn(
           'flex h-full flex-row gap-0 sm:row-span-5 sm:grid sm:grid-rows-subgrid sm:gap-y-0',
-          'overflow-hidden rounded-md border shadow-md transition hover:shadow-lg dark:border-slate-700  sm:hover:shadow-xl',
+          'overflow-hidden rounded-md border bg-card shadow-md transition hover:shadow-lg dark:border-slate-700  sm:hover:shadow-xl',
           'hover:border-primary dark:hover:border-white'
         )}
       >

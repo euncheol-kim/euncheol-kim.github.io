@@ -14,7 +14,7 @@ export const MiniPostCard = ({ post }: Props) => {
       <li
         className={cn(
           'flex flex-col justify-center gap-0 flex-1 px-3 h-full py-1 max-[640px]:py-2',
-          'overflow-hidden rounded-md border shadow-md transition hover:shadow-lg dark:border-slate-700',
+          'overflow-hidden rounded-md border bg-card shadow-md transition hover:shadow-lg dark:border-slate-700',
           'hover:border-primary dark:hover:border-white'
         )}
       >
