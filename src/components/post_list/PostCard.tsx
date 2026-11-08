@@ -12,10 +12,13 @@ interface Props {
 
 const PostCard = ({ post, compact = false }: Props) => {
   return (
-    <Link href={post.url} className='h-full'>
+    // sm 이상에서는 Link와 내용 래퍼를 contents로 풀고, 카드(li)가 부모 grid의 행 5개를 subgrid로 공유한다.
+    // 썸네일 / 카테고리·제목 / 설명 / 태그 / 날짜가 각각 한 행이 되어,
+    // 같은 줄 카드들의 설명·태그 시작 위치가 가장 긴 카드에 맞춰 정렬된다.
+    <Link href={post.url} className='h-full sm:contents'>
       <li
         className={cn(
-          'flex flex-row gap-0 sm:h-full sm:flex-col sm:gap-3 h-full ',
+          'flex h-full flex-row gap-0 sm:row-span-5 sm:grid sm:grid-rows-subgrid sm:gap-y-0',
           'overflow-hidden rounded-md border shadow-md transition hover:shadow-lg dark:border-slate-700  sm:hover:shadow-xl',
           'hover:border-primary dark:hover:border-white'
         )}
@@ -42,38 +45,34 @@ const PostCard = ({ post, compact = false }: Props) => {
             }}
           />
         </div>
-        <div className='relative flex flex-1 flex-col justify-between px-3 py-2 sm:p-4 sm:pt-1'>
-          <div>
+        <div className='relative flex flex-1 flex-col px-3 py-2 sm:contents'>
+          <div className='sm:px-4 sm:pt-4'>
             {post.isHot && (
               <div className='absolute right-1 top-1 z-20 rounded-sm bg-red-500 px-1.5 py-0.5 text-xs font-medium text-stone-50 sm:hidden'>
                 추천
               </div>
             )}
-            <div className='text-xs font-medium text-pink-600 sm:text-sm lg:text-base'>
+            <div className='text-xs font-medium text-pink-600 lg:text-[13px]'>
               {post.categoryPublicName}
             </div>
             <h2 className='my-1 text-sm font-semibold leading-snug sm:mb-2 sm:font-bold lg:text-[15px]'>
               {post.title}
             </h2>
-            {post.desc && (
-              <p className='mb-2 line-clamp-2 hidden text-xs leading-relaxed text-gray-500 dark:text-gray-400 sm:block'>
-                {post.desc}
-              </p>
-            )}
-            {post.tags.length > 0 && (
-              <div className='mb-1 line-clamp-1 flex flex-wrap gap-x-2 gap-y-0.5 overflow-hidden sm:mb-3'>
-                {post.tags.map((tag) => (
-                  <span
-                    key={tag}
-                    className='text-[11px] text-gray-400 dark:text-gray-500'
-                  >
-                    #{tag}
-                  </span>
-                ))}
-              </div>
-            )}
           </div>
-          <div className='flex justify-between gap-3 text-xs text-gray-500 dark:text-gray-400 sm:text-sm'>
+          {/* subgrid 행 순서가 어긋나지 않도록 설명·태그는 내용이 없어도 항상 렌더링한다 */}
+          <div className='hidden sm:block sm:px-4'>
+            <p className='mb-3 text-xs leading-relaxed text-gray-500 dark:text-gray-400'>
+              {post.desc}
+            </p>
+          </div>
+          <div className='mb-1 mt-auto flex flex-wrap content-start gap-x-2 gap-y-0.5 sm:mb-3 sm:mt-0 sm:px-4'>
+            {post.tags.map((tag) => (
+              <span key={tag} className='text-[11px] font-medium text-sky-700 dark:text-sky-400'>
+                #{tag}
+              </span>
+            ))}
+          </div>
+          <div className='flex items-end justify-between gap-3 text-xs text-gray-500 dark:text-gray-400 sm:px-4 sm:pb-4 sm:text-sm'>
             <div className='flex items-center gap-1'>
               <CalendarDays className='w-3.5' />
               <span>{post.dateString}</span>
