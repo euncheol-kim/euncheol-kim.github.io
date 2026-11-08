@@ -6,15 +6,24 @@ export const CATEGORY_GROUP_NAMES: Record<string, string> = {
   error_handling: 'Error Handling',
   ai: 'AI',
   client: 'Client',
-  backend: 'Backend',
+  server: 'Server',
+  data_storage: 'Data Storage',
+  deploy: 'Deploy',
+  architecture: 'Architecture',
   cs: 'CS',
   programming_language: 'Programming Language',
   skill_sheet: 'Skill Sheet',
   etc: 'Etc',
 };
 
-// 고정 상위 카테고리. All, 추천 바로 뒤에 이 순서로 노출되며, 포스트가 없어도 항상 노출된다.
-export const PINNED_CATEGORY_GROUPS = ['project', 'error_handling', 'ai', 'client', 'backend'];
+// 고정 상위 카테고리의 줄 구성. 각 배열이 카테고리 탭의 한 줄이며, 첫 줄은 All, 추천 뒤에 이어진다.
+// 여기에 있는 카테고리는 포스트가 없어도 항상 노출되고, 없는 카테고리는 마지막 줄 뒤에 붙는다.
+export const CATEGORY_GROUP_ROWS: string[][] = [
+  ['project', 'error_handling', 'ai', 'client', 'server', 'data_storage', 'deploy'],
+  ['architecture', 'cs', 'programming_language', 'skill_sheet'],
+];
+
+export const PINNED_CATEGORY_GROUPS = CATEGORY_GROUP_ROWS.flat();
 
 // 하위 카테고리 표시 이름. 폴더명으로 만든 이름(dir_name -> Dir Name)이 어색할 때만 지정한다.
 export const CATEGORY_PUBLIC_NAMES: Record<string, string> = {

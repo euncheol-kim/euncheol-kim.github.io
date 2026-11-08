@@ -30,6 +30,12 @@ const CategoryList = ({
       ? group.id === currentGroup
       : group.children.some((cg) => cg.dirName === currentCategory)
   );
+  // 설정된 줄 번호대로 상위 카테고리를 줄 단위로 묶는다 (첫 줄은 All, 추천과 함께 노출)
+  const categoryRows = categoryGroupList.reduce<CategoryGroupDetail[][]>((rows, group) => {
+    while (rows.length <= group.row) rows.push([]);
+    rows[group.row].push(group);
+    return rows;
+  }, [[]]);
   const selectValue = currentGroup ? `${GROUP_VALUE_PREFIX}${currentGroup}` : currentCategory;
 
   const onCategoryChange = (value: string) => {
@@ -46,31 +52,39 @@ const CategoryList = ({
 
   return (
     <>
-      <section className='hidden flex-1 grid-cols-[auto_1fr] items-start gap-x-3 gap-y-2 sm:grid'>
+      <section className='hidden flex-1 grid-cols-[auto_1fr] items-start gap-x-3 gap-y-4 sm:grid'>
         <h2 className='py-1 text-base'>Category</h2>
-        <ul className='flex flex-wrap gap-2'>
-          <CategoryButton
-            href='/blog'
-            isCurrent={currentCategory === 'all' && !currentGroup}
-            displayName='All'
-            count={allPostCount}
-          />
-          <CategoryButton
-            href='/blog/hot'
-            isCurrent={currentCategory === 'hot'}
-            displayName='🔥추천'
-            count={hotPostCount}
-          />
-          {categoryGroupList.map((group) => (
-            <CategoryButton
-              key={group.id}
-              href={`/blog/group/${group.id}`}
-              displayName={group.name}
-              isCurrent={group.id === activeGroup?.id}
-              count={group.count}
-            />
+        <div className='flex flex-col gap-2'>
+          {categoryRows.map((row, rowIndex) => (
+            <ul key={rowIndex} className='flex flex-wrap gap-2'>
+              {rowIndex === 0 && (
+                <>
+                  <CategoryButton
+                    href='/blog'
+                    isCurrent={currentCategory === 'all' && !currentGroup}
+                    displayName='All'
+                    count={allPostCount}
+                  />
+                  <CategoryButton
+                    href='/blog/hot'
+                    isCurrent={currentCategory === 'hot'}
+                    displayName='🔥추천'
+                    count={hotPostCount}
+                  />
+                </>
+              )}
+              {row.map((group) => (
+                <CategoryButton
+                  key={group.id}
+                  href={`/blog/group/${group.id}`}
+                  displayName={group.name}
+                  isCurrent={group.id === activeGroup?.id}
+                  count={group.count}
+                />
+              ))}
+            </ul>
           ))}
-        </ul>
+        </div>
         {activeGroup && activeGroup.children.length > 0 && (
           <>
             <h3 className='py-1 text-base'>Sub Category</h3>

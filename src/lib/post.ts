@@ -1,4 +1,9 @@
-import { CATEGORY_GROUP_NAMES, CATEGORY_PUBLIC_NAMES, PINNED_CATEGORY_GROUPS } from '@/config/category';
+import {
+  CATEGORY_GROUP_NAMES,
+  CATEGORY_GROUP_ROWS,
+  CATEGORY_PUBLIC_NAMES,
+  PINNED_CATEGORY_GROUPS,
+} from '@/config/category';
 import { CategoryDetail, CategoryGroupDetail, HeadingItem, Post, PostMatter, SearchablePost } from '@/config/types';
 import dayjs from 'dayjs';
 import fs from 'fs';
@@ -126,6 +131,12 @@ export const getCategoryGroupList = () => {
   return getSubDirNames(POSTS_PATH).sort((a, b) => orderOf(a) - orderOf(b));
 };
 
+// 상위 카테고리가 노출될 줄 번호. 줄 구성에 없으면 마지막 줄에 붙는다.
+const getCategoryGroupRow = (groupPath: string) => {
+  const row = CATEGORY_GROUP_ROWS.findIndex((groups) => groups.includes(groupPath));
+  return row === -1 ? CATEGORY_GROUP_ROWS.length - 1 : row;
+};
+
 export const getCategoryGroupPublicName = (groupPath: string) =>
   CATEGORY_GROUP_NAMES[groupPath] ?? getCategoryPublicName(groupPath);
 
@@ -174,7 +185,13 @@ export const getCategoryGroupDetailList = async (): Promise<CategoryGroupDetail[
         .filter((detail) => categorySet.has(detail.dirName))
         .sort((a, b) => b.count - a.count);
       const count = children.reduce((sum, detail) => sum + detail.count, 0);
-      return { id: groupPath, name: getCategoryGroupPublicName(groupPath), count, children };
+      return {
+        id: groupPath,
+        name: getCategoryGroupPublicName(groupPath),
+        row: getCategoryGroupRow(groupPath),
+        count,
+        children,
+      };
     })
     .filter((group) => group.count > 0 || PINNED_CATEGORY_GROUPS.includes(group.id));
 };

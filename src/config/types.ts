@@ -41,6 +41,7 @@ export interface CategoryDetail {
 export interface CategoryGroupDetail {
   id: string;
   name: string;
+  row: number; // 카테고리 탭에서 노출될 줄 번호
   count: number;
   children: CategoryDetail[];
 }
