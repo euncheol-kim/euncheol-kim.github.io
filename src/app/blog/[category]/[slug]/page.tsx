@@ -51,7 +51,8 @@ const PostDetail = async ({ params: { category, slug } }: Props) => {
   const post = await getPostDetail(category, slug);
   const toc = parseToc(post.content);
   return (
-    <div className='prose mx-auto w-full max-w-[750px] px-5 dark:prose-invert sm:px-6'>
+    // lg부터 본문을 900px로 넓힌다. xl에서는 오른쪽 목차 위치를 유지하도록 늘어난 폭만큼 왼쪽으로 옮긴다.
+    <div className='prose mx-auto w-full max-w-[750px] px-5 dark:prose-invert sm:px-6 lg:max-w-[900px] xl:relative xl:right-[75px]'>
       <PostHeader post={post} />
       <TocTop toc={toc} />
       <article className='relative'>
