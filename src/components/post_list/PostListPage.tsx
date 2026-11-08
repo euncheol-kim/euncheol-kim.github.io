@@ -24,7 +24,7 @@ const PostListPage = async ({ category, group, postList, className, ...props  }:
       <div className='mx-auto my-6 w-full max-w-[1200px] px-8'>
         <hr />
       </div>
-      <section className={cn('mx-auto w-full max-w-[1200px] px-4 mt-10', className)} {...props}>
+      <section className={cn('mx-auto w-full max-w-[1200px] px-4 mt-2', className)} {...props}>
         <div className='mb-5 flex flex-wrap items-center gap-x-3 sm:items-start gap-y-2 pl-2 font-bold sm:pl-0'>
           <h2 className='py-1 text-sm sm:hidden'>Category</h2>
           <CategoryList
