@@ -177,8 +177,7 @@ class DomainRuleArchTest {
 }
 ```
 #### 코드설명
-`builder_ShouldOnlyBeCalledByDomainOrPersistence`는 domain계층과 Driving adapter 하위 디렉토리인 mapper를 제외한 다른 패키지에서,
-도메인 패키지에 속한 클래스의 builder() 메서드를 호출해서는 안 되는 Micro Architecture 적합도 함수를 작성하여 요구사항 [1번](#micro-architecture-fitness-function-range-1)과 [2번](#micro-architecture-fitness-function-range-2)을 만족시킵니다.
+`builder_ShouldOnlyBeCalledByDomainOrPersistence`는 domain계층과 Driving adapter 하위 디렉토리인 mapper를 제외한 다른 패키지에서, 도메인 패키지에 속한 클래스의 builder() 메서드를 호출해서는 안 되는 Micro Architecture 적합도 함수를 작성하여 요구사항 [1번](#micro-architecture-fitness-function-range-1)과 [2번](#micro-architecture-fitness-function-range-2)을 만족시킵니다.
 
 자세한 코드의 설명은 주석으로 대체합니다.
 

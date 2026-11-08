@@ -213,8 +213,7 @@ app = FastAPI()
 @app.get(
     ....
 ```
-현재 코드가 위와 같을 때, 중요한 포인트는 `Base.metadata.create_all(engine)` 코드 부분인데,
-`create_all()`은 <u> 존재하지 않는 테이블에 대해서 생성만 하고, 테이블 구조는 변경하지 않는다.</u>
+현재 코드가 위와 같을 때, 중요한 포인트는 `Base.metadata.create_all(engine)` 코드 부분인데, `create_all()`은 <u> 존재하지 않는 테이블에 대해서 생성만 하고, 테이블 구조는 변경하지 않는다.</u>
 
 <br/>
 

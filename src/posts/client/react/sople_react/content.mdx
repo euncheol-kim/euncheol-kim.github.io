@@ -361,8 +361,7 @@ JSX는 자바스크립트 코드 안에 HTML 마크업을 섞어 쓴 매우 독�
 ```javascript
 const element = <h1 id="box">Hello, World!</h1>;
 ```
-예를 들어, `<h1 id="box">Hello, World!</h>` 형태로 작성된 코드는 내부적으로 
-`React.createElement('h1', { id: "box" }, 'Hello, World')`로 변환된다.
+예를 들어, `<h1 id="box">Hello, World!</h>` 형태로 작성된 코드는 내부적으로 `React.createElement('h1', { id: "box" }, 'Hello, World')`로 변환된다.
 - 첫 번째 인자 <b>type</b> ( h1 ): 생성할 HTML의 태그 이름 또는 React Component.
 - 두 번째 인자 <b>props</b> ( \{id: "box"} ): 태그에 부여된 속성 만약 속성이 없었다면 null 할당
 - 세 번째 인자 <b>children</b> ( 'Hello, World!' ): 태그 안에 들어갈 자식의 내용

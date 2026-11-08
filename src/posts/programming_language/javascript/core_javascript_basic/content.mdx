@@ -84,8 +84,7 @@ alert( Boolean(0) ); // 숫자 0(false)
 alert( Boolean("hello") ); // 문자열(true)
 alert( Boolean("") ); // 빈 문자열(false)
 ```
-값이 있는 문자열을 Boolean으로 형변환 할 경우 true를,
-빈 문자열을 Boolean으로 형변환한다면 false가 되는 것을 기억한다.
+값이 있는 문자열을 Boolean으로 형변환 할 경우 true를, 빈 문자열을 Boolean으로 형변환한다면 false가 되는 것을 기억한다.
 
 ## ⭐️ 7. 비교 연산에 대한 설명
 Javascript에서 가장 헷갈리는 부분이다.
@@ -268,8 +267,7 @@ export default UserProfile;
 <Callout type="info"> <b> 옵셔널 체이닝: `?`연산자</b>
 옵셔널 체이닝은 참조가 null 또는 undefined일 수 있는 상황에서 안전하게 객체의 속성에 접근할 수 있게 해준다. 옵셔널 체이닝은 객체 변수 뒤에 `?`연산자를 붙여 사용한다. <br/>
 문제 가정 상황: 
-`user.bio`를 코드 내부에서 사용했고, user 객체의 값이 null이거나 undefined인 경우의 코드를 가정해보자. 이 가정된 코드를 읽을 시점이 오면 user는 null이거나 undefined가 되어질 것이고,
-이후 내부 property인 bio를 읽을 때 `TypeError: Cannot read properties of undefined`가 발생하여 코드의 실행이 멈추게 되는 상황이 발생된다. <br/>
+`user.bio`를 코드 내부에서 사용했고, user 객체의 값이 null이거나 undefined인 경우의 코드를 가정해보자. 이 가정된 코드를 읽을 시점이 오면 user는 null이거나 undefined가 되어질 것이고, 이후 내부 property인 bio를 읽을 때 `TypeError: Cannot read properties of undefined`가 발생하여 코드의 실행이 멈추게 되는 상황이 발생된다. <br/>
 해결 방법:
 옵셔널 체이닝을 사용한다. 객체가 null 또는 undefined라면, 그 즉시 객체의 속성 접근을 시도하지 않는다.</Callout>
 
