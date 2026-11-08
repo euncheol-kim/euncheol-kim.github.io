@@ -52,16 +52,16 @@ const PostCard = ({ post, compact = false }: Props) => {
             <div className='text-xs font-medium text-pink-600 sm:text-sm lg:text-base'>
               {post.categoryPublicName}
             </div>
-            <h2 className='my-1 text-sm font-semibold sm:mb-1 sm:text-base sm:font-bold lg:text-lg'>
+            <h2 className='my-1 text-sm font-semibold leading-snug sm:mb-2 sm:font-bold lg:text-[15px]'>
               {post.title}
             </h2>
             {post.desc && (
-              <p className='mb-2 line-clamp-2 hidden text-xs text-gray-500 dark:text-gray-400 sm:block'>
+              <p className='mb-2 line-clamp-2 hidden text-xs leading-relaxed text-gray-500 dark:text-gray-400 sm:block'>
                 {post.desc}
               </p>
             )}
             {post.tags.length > 0 && (
-              <div className='mb-1 line-clamp-1 flex flex-wrap gap-x-2 gap-y-0.5 overflow-hidden'>
+              <div className='mb-1 line-clamp-1 flex flex-wrap gap-x-2 gap-y-0.5 overflow-hidden sm:mb-3'>
                 {post.tags.map((tag) => (
                   <span
                     key={tag}
