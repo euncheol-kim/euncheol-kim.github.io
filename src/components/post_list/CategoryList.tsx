@@ -78,7 +78,7 @@ const CategoryList = ({
             />
           ))}
         </ul>
-        {activeGroup && (
+        {activeGroup && activeGroup.children.length > 0 && (
           <>
             <h3 className='py-1 text-base'>Sub Category</h3>
             <ul className='flex flex-wrap gap-2'>

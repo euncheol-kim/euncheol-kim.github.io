@@ -36,6 +36,9 @@ const PostListPage = async ({ category, group, postList, className, ...props  }:
           />
         </div>
         <section>
+          {postList.length === 0 && (
+            <p className='py-16 text-center text-sm text-muted-foreground'>아직 작성된 글이 없습니다.</p>
+          )}
           <ul className='grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 md:grid-cols-3 lg:gap-6'>
             {postList.map((post) => (
               <PostCard key={post.url + post.date} post={post} />

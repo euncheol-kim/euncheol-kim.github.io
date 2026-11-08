@@ -1,4 +1,4 @@
-import { CATEGORY_GROUP_NAMES, CATEGORY_PUBLIC_NAMES } from '@/config/category';
+import { CATEGORY_GROUP_NAMES, CATEGORY_PUBLIC_NAMES, PINNED_CATEGORY_GROUPS } from '@/config/category';
 import { CategoryDetail, CategoryGroupDetail, HeadingItem, Post, PostMatter, SearchablePost } from '@/config/types';
 import dayjs from 'dayjs';
 import fs from 'fs';
@@ -115,9 +115,12 @@ const getSubDirNames = (dirPath: string) =>
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name);
 
-// 상위 카테고리 폴더 목록 : 설정된 순서대로, 설정에 없는 폴더는 맨 뒤에
+// 상위 카테고리 폴더 목록 : 고정 카테고리 → 설정된 순서 → 설정에 없는 폴더 순
 export const getCategoryGroupList = () => {
-  const groupOrder = Object.keys(CATEGORY_GROUP_NAMES);
+  const groupOrder = [
+    ...PINNED_CATEGORY_GROUPS,
+    ...Object.keys(CATEGORY_GROUP_NAMES).filter((group) => !PINNED_CATEGORY_GROUPS.includes(group)),
+  ];
   const orderOf = (group: string) =>
     groupOrder.includes(group) ? groupOrder.indexOf(group) : groupOrder.length;
   return getSubDirNames(POSTS_PATH).sort((a, b) => orderOf(a) - orderOf(b));
@@ -158,7 +161,7 @@ export const getCategoryDetailList = async () => {
   return detailList;
 };
 
-// 상위 카테고리별로 하위 카테고리를 묶어서 조회 (노출할 포스트가 없는 카테고리는 제외)
+// 상위 카테고리별로 하위 카테고리를 묶어서 조회 (노출할 포스트가 없는 카테고리는 고정 카테고리만 노출)
 export const getCategoryGroupDetailList = async (): Promise<CategoryGroupDetail[]> => {
   const postList = await getPostList();
   const detailList = await getCategoryDetailList();
@@ -173,7 +176,7 @@ export const getCategoryGroupDetailList = async (): Promise<CategoryGroupDetail[
       const count = children.reduce((sum, detail) => sum + detail.count, 0);
       return { id: groupPath, name: getCategoryGroupPublicName(groupPath), count, children };
     })
-    .filter((group) => group.count > 0);
+    .filter((group) => group.count > 0 || PINNED_CATEGORY_GROUPS.includes(group.id));
 };
 
 // 상위 카테고리에 속한 모든 포스트를 날짜 최신순으로 조회
