@@ -20,14 +20,14 @@ export const MiniPostCard = ({ post }: Props) => {
       >
         <div className='relative flex flex-1 flex-col min-[980px]:justify-between justify-center'>
           <div>
-            <div className='text-xs font-medium text-pink-600 sm:text-sm lg:text-base'>
+            <div className='text-xs font-medium text-pink-600 sm:text-sm'>
               {post.categoryPublicName}
             </div>
-            <h2 className='my-1 text-sm font-semibold sm:text-base sm:font-bold lg:text-lg'>
+            <h2 className='my-0.5 line-clamp-1 text-sm font-semibold sm:font-bold lg:text-[15px]'>
               {post.title}
             </h2>
           </div>
-          <div className='flex justify-between gap-3 text-xs text-gray-500 dark:text-gray-400 sm:text-sm'>
+          <div className='flex justify-between gap-3 text-xs text-gray-500 dark:text-gray-400'>
             <div className='flex items-center gap-1'>
               <CalendarDays className='w-3.5' />
               <span>{post.dateString}</span>

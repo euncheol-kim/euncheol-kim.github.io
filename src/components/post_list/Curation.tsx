@@ -11,15 +11,15 @@ export const Curation = ({postList}: {postList: Post[]}) => {
   const hotPostAllList = postList.filter((post) => post.isHot);
 
   return (
-    <div className='mx-auto w-full max-w-[1200px] px-4 flex gap-6 lg:gap-8 mt-6 sm:mt-10 flex-col sm:flex-row items-stretch'>
-      <section className="flex-1 w-full flex flex-col min-[980px]:min-w-[520px]">
-        <h2 className='text-lg sm:text-2xl font-bold mb-3'>최신 게시물</h2>
+    <div className='mx-auto w-full max-w-[1200px] px-4 flex gap-6 lg:gap-8 mt-6 sm:mt-8 flex-col sm:flex-row items-stretch'>
+      <section className="flex-1 w-full flex flex-col sm:flex-[5]">
+        <h2 className='text-lg sm:text-xl font-bold mb-2'>최신 게시물</h2>
         <div>
-        <PostCard post={firstPost} />
+        <PostCard post={firstPost} compact />
         </div>
       </section>
-      <section className='flex-1 w-full flex flex-col'>
-        <h2 className='text-lg sm:text-2xl font-bold mb-3'>추천 게시물 🔥</h2>
+      <section className='flex-1 w-full flex flex-col sm:flex-[7]'>
+        <h2 className='text-lg sm:text-xl font-bold mb-2'>추천 게시물 🔥</h2>
         <HotPostCarousel posts={hotPostAllList} />
       </section>
     </div>

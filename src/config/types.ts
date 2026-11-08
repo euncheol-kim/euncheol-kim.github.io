@@ -15,6 +15,7 @@ export interface PostMatter {
 export interface Post extends Omit<PostMatter, 'tags'> {
   url: string;
   slug: string;
+  groupPath: string;
   categoryPath: string;
   content: string;
   readingMinutes: number;
@@ -35,6 +36,13 @@ export interface CategoryDetail {
   dirName: string;
   publicName: string;
   count: number;
+}
+
+export interface CategoryGroupDetail {
+  id: string;
+  name: string;
+  count: number;
+  children: CategoryDetail[];
 }
 
 export interface HeadingItem {

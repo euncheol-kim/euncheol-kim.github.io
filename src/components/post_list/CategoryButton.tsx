@@ -8,12 +8,13 @@ interface Props {
   displayName: string;
   href: string;
   count: number;
+  variant?: 'outline' | 'secondary';
 }
 
-export const CategoryButton = ({ isCurrent, displayName, href, count }: Props) => {
+export const CategoryButton = ({ isCurrent, displayName, href, count, variant = 'outline' }: Props) => {
   return (
     <li>
-      <Button asChild size='xs' variant={isCurrent ? 'default' : 'outline'}>
+      <Button asChild size='xs' variant={isCurrent ? 'default' : variant}>
         <Link href={href}>
           {displayName}{' '}
           <span

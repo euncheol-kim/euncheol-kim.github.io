@@ -7,9 +7,10 @@ import { CalendarDays, Clock3 } from 'lucide-react';
 
 interface Props {
   post: Post;
+  compact?: boolean; // 썸네일을 낮은 비율로 보여줘 카드 높이를 줄인다
 }
 
-const PostCard = ({ post }: Props) => {
+const PostCard = ({ post, compact = false }: Props) => {
   return (
     <Link href={post.url} className='h-full'>
       <li
@@ -19,7 +20,12 @@ const PostCard = ({ post }: Props) => {
           'hover:border-primary dark:hover:border-white'
         )}
       >
-        <div className='relative aspect-video w-1/3 rounded-t-md sm:border-b max-[550px]:hidden sm:w-full'>
+        <div
+          className={cn(
+            'relative w-1/3 rounded-t-md sm:border-b max-[550px]:hidden sm:w-full',
+            compact ? 'aspect-video sm:aspect-[3/1]' : 'aspect-video'
+          )}
+        >
           {post.isHot && (
             <div className='absolute left-1 top-1 z-10 rounded-sm bg-red-500 px-2 py-1 text-xs font-medium text-stone-50 max-sm:hidden'>
               추천
