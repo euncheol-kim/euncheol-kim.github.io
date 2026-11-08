@@ -153,19 +153,21 @@ export const getPostDetail = async (category: string, slug: string) => {
 };
 
 export const parseToc = (content: string): HeadingItem[] => {
-  const regex = /^(##|###) (.*$)/gim;
-  const headingList = content.match(regex);
+  // 코드 블록 안의 주석(# ...)이 헤딩으로 잡히지 않도록 제거
+  const withoutCodeBlocks = content.replace(/^(```|~~~)[\s\S]*?^\1/gm, '');
+  const regex = /^(#{1,3}) (.*$)/gm;
+  const headingList = Array.from(withoutCodeBlocks.matchAll(regex));
   const slugger = new GithubSlugger();
 
   const stripHtml = (str: string) => str.replace(/<[^>]*>/g, '').trim();
 
-  return (
-    headingList?.map((heading: string) => {
-      const indent = (heading.match(/#/g)?.length || 2) - 2;
-      const rawText = heading.replace(/^###?\s/, '');
-      const text = stripHtml(rawText);
-      const link = '#' + slugger.slug(text);
-      return { text, link, indent };
-    }) || []
-  );
+  // 포스트에서 사용된 가장 상위 헤딩 레벨을 기준으로 들여쓰기 계산
+  const minLevel = Math.min(...headingList.map(([, hashes]) => hashes.length));
+
+  return headingList.map(([, hashes, rawText]) => {
+    const indent = hashes.length - minLevel;
+    const text = stripHtml(rawText);
+    const link = '#' + slugger.slug(text);
+    return { text, link, indent };
+  });
 };
