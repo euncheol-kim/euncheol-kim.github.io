@@ -4,6 +4,7 @@
 export const CATEGORY_GROUP_NAMES: Record<string, string> = {
   project: 'Project',
   error_handling: 'Error Handling',
+  ai: 'AI',
   client: 'Client',
   backend: 'Backend',
   cs: 'CS',
@@ -13,7 +14,7 @@ export const CATEGORY_GROUP_NAMES: Record<string, string> = {
 };
 
 // 고정 상위 카테고리. All, 추천 바로 뒤에 이 순서로 노출되며, 포스트가 없어도 항상 노출된다.
-export const PINNED_CATEGORY_GROUPS = ['project', 'error_handling', 'client', 'backend'];
+export const PINNED_CATEGORY_GROUPS = ['project', 'error_handling', 'ai', 'client', 'backend'];
 
 // 하위 카테고리 표시 이름. 폴더명으로 만든 이름(dir_name -> Dir Name)이 어색할 때만 지정한다.
 export const CATEGORY_PUBLIC_NAMES: Record<string, string> = {
