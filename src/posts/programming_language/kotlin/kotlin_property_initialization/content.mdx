@@ -1,0 +1,231 @@
+---
+title: "Kotlin 프로퍼티에는 기본값이 없다: 초기화 규칙과 Backing Field"
+desc: "Java와 달리 Kotlin은 프로퍼티를 선언만 하면 에러가 납니다. 왜 기본값을 자동으로 넣어 주지 않는지, 값을 정하는 방법에는 무엇이 있는지, 그리고 getter만 있는 프로퍼티는 왜 초기화 없이도 되는지를 정리합니다."
+date: 2026-11-12
+thumbnail: ./thumbnail.webp
+isHot: false
+isVisible: true
+tags: kotlin, Property, Initialization, Backing Field
+---
+
+### 🌱 포스팅 작성 이유
+
+Java를 쓰던 습관대로 Kotlin 클래스에 프로퍼티를 선언만 했더니 컴파일 에러가 났습니다.
+
+```kotlin
+class Person {
+    var age: Int        // ❌ Property must be initialized or be abstract
+}
+```
+
+Java였다면 `age`에 자동으로 0이 들어갔을 텐데, Kotlin은 왜 값을 직접 정하라고 하는지, 그리고 어떤 경우에는 값을 정하지 않아도 되는지 정리합니다.
+
+---
+
+## 1. 프로퍼티란
+
+Java에서는 값을 담는 **필드**와 그 값을 읽고 쓰는 **getter/setter 메서드**를 따로 작성합니다.
+
+```java
+public class Person {
+    private int age;                              // 필드
+
+    public int getAge() { return age; }           // getter
+    public void setAge(int v) { age = v; }        // setter
+}
+```
+
+Kotlin은 이 셋을 **프로퍼티(Property)** 한 줄로 묶습니다.
+
+```kotlin
+class Person {
+    var age: Int = 0
+}
+```
+
+이 한 줄로 필드, getter, setter가 모두 만들어집니다. `person.age`라고 읽으면 getter가, `person.age = 30`이라고 쓰면 setter가 호출됩니다. 겉으로는 변수처럼 보이지만 실제로는 메서드 호출입니다.
+
+### 1.1 val과 var
+
+| 키워드 | 의미 | 생성되는 접근자 |
+| --- | --- | --- |
+| `val` | 읽기 전용 (재할당 불가) | getter만 |
+| `var` | 읽기/쓰기 가능 | getter와 setter |
+
+---
+
+## 2. Kotlin에는 자동으로 들어가는 기본값이 없다
+
+Java는 필드를 선언만 해도 타입에 맞는 기본값이 들어갑니다.
+
+```java
+public class Person {
+    int age;          // 자동으로 0
+    boolean adult;    // 자동으로 false
+    String name;      // 자동으로 null
+}
+```
+
+Kotlin은 선언만 하면 에러입니다. nullable 타입이어도 알아서 `null`이 들어가지 않습니다.
+
+```kotlin
+class Person {
+    var age: Int              // ❌ Property must be initialized or be abstract
+    var name: String          // ❌
+    var nickname: String?     // ❌ nullable이어도 자동으로 null이 되지 않는다
+}
+```
+
+### 2.1 왜 이렇게 설계했나
+
+Kotlin의 핵심 목표 중 하나가 null 안전성입니다. Java에서는 `String name`이 몰래 `null`로 시작하기 때문에, 초기화를 깜빡한 필드가 한참 뒤에 `NullPointerException`을 일으킵니다.
+
+Kotlin은 **"모든 프로퍼티는 객체 생성이 끝난 순간 유효한 값을 갖는다"** 를 컴파일 시점에 강제합니다. 값을 정하지 않으면 실행이 아니라 컴파일에서 막히므로, 초기화를 빠뜨린 실수를 가장 이른 시점에 잡을 수 있습니다.
+
+---
+
+## 3. 값을 정하는 방법
+
+| 방법 | 예시 | 설명 |
+| --- | --- | --- |
+| 초기화 식 | `var age: Int = 0` | 가장 기본. 선언하면서 값을 적는다 |
+| 생성자 프로퍼티 | `class Person(var age: Int)` | 객체를 만들 때 외부에서 받는다 |
+| `init` 블록 | `init { age = compute() }` | 생성 시 여러 줄 로직으로 정한다 |
+| `lateinit var` | `lateinit var db: Database` | "나중에 반드시 넣겠다"고 약속한다. 넣기 전에 읽으면 예외 |
+| `by lazy` | `val config by lazy { load() }` | 처음 읽을 때 한 번 계산한다 |
+| 커스텀 getter | `val isAdult get() = age >= 19` | 저장하지 않고 계산하므로 초기화가 필요 없다 (4장) |
+
+### 3.1 초기화 식
+
+가장 많이 쓰는 방법입니다. 선언할 때 `=` 뒤에 붙이는 부분을 **초기화 식(Initializer)** 이라고 합니다.
+
+```kotlin
+var age: Int = 0
+//           ^^^ 초기화 식
+var ageIn2050: Int = 2050 - birthYear
+//                 ^^^^^^^^^^^^^^^^^^ 계산식이어도 된다
+```
+
+초기화 식은 객체가 생성되는 순간 **한 번** 계산되어 저장됩니다. Java로 보면 생성자 안의 대입문 한 줄에 해당합니다.
+
+### 3.2 "기본값"이라는 말이 쓰이는 다른 자리
+
+Kotlin에서 "기본값(default value)"이라고 하면 보통 **함수나 생성자의 파라미터 기본값**을 가리킵니다. 이것은 존재합니다.
+
+```kotlin
+class Person(var age: Int = 0)    // 인자를 생략하면 0
+
+Person()        // age = 0
+Person(30)      // age = 30
+```
+
+이것은 "호출할 때 인자를 안 넘기면 쓸 값"이지, "프로퍼티를 선언만 하면 들어가는 값"이 아닙니다. 2장에서 말한 "기본값이 없다"는 후자를 뜻합니다.
+
+---
+
+## 4. 초기화가 필요 없는 프로퍼티: 상자와 규칙
+
+2장의 규칙에는 예외처럼 보이는 경우가 있습니다. 아래 코드는 `=`가 없는데도 에러가 나지 않습니다.
+
+```kotlin
+class Person(val age: Int) {
+    val isAdult: Boolean        // ✅ 초기화 식이 없는데 에러 아님
+        get() = age >= 19
+}
+```
+
+이유를 이해하려면 프로퍼티를 **"상자"** 와 **"규칙"** 두 종류로 나누어 봐야 합니다.
+
+### 4.1 보통의 프로퍼티는 상자다
+
+```kotlin
+val isAdult: Boolean = true
+```
+
+이 줄은 "`isAdult`라는 상자를 만들고 안에 `true`를 넣어라"입니다. 상자를 만들었고 뭘 넣을지도 정했으니 문제없습니다.
+
+```kotlin
+val isAdult: Boolean        // ❌ 에러
+```
+
+이 줄은 "`isAdult`라는 상자를 만들어라"까지만 말하고 뭘 넣을지 말하지 않았습니다. Java라면 빈 상자에 자동으로 `false`를 넣어 주지만, Kotlin은 빈 상자를 허용하지 않으므로 에러를 냅니다. 2장의 규칙이 바로 이것입니다.
+
+### 4.2 getter를 붙이면 규칙이 된다
+
+```kotlin
+val isAdult: Boolean        // ✅ 에러 아님
+    get() = age >= 19
+```
+
+둘째 줄 `get() = age >= 19`가 붙는 순간 의미가 바뀝니다. 이제 이 코드는 상자를 만들라는 말이 아니라, **"누가 `isAdult`를 물어보면 그때 `age >= 19`를 계산해서 대답해라"라는 규칙**입니다.
+
+상자가 없습니다. 그러니 "상자에 뭘 넣을지 안 정했다"는 에러도 날 수 없습니다. 넣을 상자 자체가 없기 때문입니다.
+
+### 4.3 사실상 함수다
+
+4.2의 코드는 아래 함수와 거의 같습니다.
+
+```kotlin
+fun isAdult(): Boolean = age >= 19
+```
+
+함수를 선언할 때 초기값을 정하지 않는 것처럼, getter만 있는 프로퍼티도 초기값이 필요 없습니다. 다른 점은 호출할 때 `person.isAdult()`가 아니라 `person.isAdult`라고 괄호 없이 쓴다는 것뿐입니다.
+
+### 4.4 정리
+
+| 코드 | 정체 | 초기값 |
+| --- | --- | --- |
+| `val isAdult: Boolean = true` | 상자 | 넣었음 → OK |
+| `val isAdult: Boolean` | 상자 | 안 넣음 → ❌ |
+| `val isAdult: Boolean get() = age >= 19` | 규칙 (상자 없음) | 필요 없음 → OK |
+
+---
+
+## 5. 상자의 정식 이름: Backing Field
+
+4장에서 "상자"라고 부른 것의 정식 이름은 **뒷받침하는 필드(Backing Field)** 입니다. 프로퍼티의 값이 실제로 저장되는 공간이며, 커스텀 getter/setter 안에서는 `field`라는 이름으로 이 공간에 접근합니다.
+
+```kotlin
+var age: Int = 0
+    set(value) {
+        require(value >= 0)
+        field = value       // Backing Field(상자)에 저장
+    }
+```
+
+### 5.1 Backing Field는 언제 생기나
+
+컴파일러는 다음 중 하나라도 해당하면 Backing Field를 만듭니다.
+
+1. getter나 setter를 직접 쓰지 않아서 **기본 접근자**를 사용한다.
+2. 직접 쓴 getter/setter 안에서 **`field`를 참조**한다.
+
+둘 다 아니면, 즉 접근자를 전부 직접 썼고 그 안에서 `field`를 한 번도 쓰지 않았다면 Backing Field는 생기지 않습니다. 4.2의 `isAdult`가 바로 이 경우입니다.
+
+### 5.2 Backing Field가 없으면 초기화 식도 못 쓴다
+
+4장을 뒤집어 보면, 상자가 없는 프로퍼티에 값을 넣으려 해도 에러가 납니다.
+
+```kotlin
+val isAdult: Boolean = false   // ❌ Initializer is not allowed here
+    get() = age >= 19          //    because this property has no backing field
+```
+
+`= false`는 "상자에 `false`를 넣어라"인데 상자가 없으니 넣을 곳이 없습니다. 에러 메시지도 정확히 "Backing Field가 없어서 초기화 식을 허용하지 않는다"라고 말합니다.
+
+정리하면 초기화 식과 Backing Field는 항상 같이 갑니다.
+
+| Backing Field | 초기화 식 |
+| --- | --- |
+| 있음 (상자) | 반드시 필요 |
+| 없음 (규칙) | 쓸 수 없음 |
+
+---
+
+## 6. 마무리
+
+Kotlin에 Java식 암묵적 기본값이 없는 이유는, 빈 값이 몰래 남아 있다가 실행 중에 터지는 문제를 컴파일 시점에 막기 위해서입니다. 그래서 값을 저장하는 프로퍼티(상자)는 반드시 초기화해야 합니다.
+
+반면 getter만 있고 `field`를 쓰지 않는 프로퍼티(규칙)는 저장하는 것이 없으므로 초기화할 것도 없습니다. 이 둘을 가르는 기준이 Backing Field의 존재 여부입니다.
+
+**값을 저장하면 초기화가 필수이고, 계산만 하면 초기화가 불가능하다.** 이 한 줄을 기억하면 프로퍼티 초기화 에러의 대부분을 설명할 수 있습니다.
