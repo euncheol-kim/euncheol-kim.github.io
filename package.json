@@ -3,9 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "node scripts/convert-images-to-webp.mjs && node scripts/copy-post-images.mjs && next dev",
-    "build": "node scripts/convert-images-to-webp.mjs && node scripts/copy-post-images.mjs && next build",
+    "dev": "node scripts/convert-images-to-webp.mjs && node scripts/normalize-thumbnails.mjs && node scripts/copy-post-images.mjs && next dev",
+    "build": "node scripts/convert-images-to-webp.mjs && node scripts/normalize-thumbnails.mjs && node scripts/copy-post-images.mjs && next build",
     "start": "next start",
+    "thumbnails": "node scripts/normalize-thumbnails.mjs",
     "lint": "next lint"
   },
   "dependencies": {

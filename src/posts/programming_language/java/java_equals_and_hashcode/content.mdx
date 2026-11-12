@@ -1,0 +1,236 @@
+---
+title: "Java의 equals(), hashCode(), toString(): 왜 같이 재정의해야 하는가"
+desc: "equals()는 두 객체가 논리적으로 같은지, hashCode()는 해시 기반 컬렉션에서 객체를 어느 칸에 둘지, toString()은 객체를 어떻게 글자로 보여 줄지 결정합니다. equals와 hashCode 사이의 규약과, 하나만 재정의했을 때 HashSet과 HashMap이 어떻게 망가지는지 정리합니다."
+date: 2026-11-12
+thumbnail: ./thumbnail.webp
+isHot: false
+isVisible: true
+tags: java, equals, hashCode, toString
+---
+
+### 🌱 포스팅 작성 이유
+
+Kotlin의 `data class`가 `equals()`, `hashCode()`, `toString()`을 자동으로 만들어 준다는 설명을 읽다가, 왜 이 셋이 항상 한 묶음으로 다뤄지는지 궁금해졌습니다.
+
+세 메서드가 각각 무엇을 하는지, 특히 `equals()`와 `hashCode()` 사이에 어떤 약속이 있는지 Java 기준으로 정리합니다.
+
+---
+
+## 1. equals(): 두 객체가 "같은가"
+
+Java에서 "같다"는 말은 두 가지 의미로 나뉩니다.
+
+| 종류 | 질문 | 비교 방법 |
+| --- | --- | --- |
+| 동일성 (identity) | 메모리상 같은 객체인가 | `==` |
+| 동등성 (equality) | 내용이 같은가 | `equals()` |
+
+`Object`의 기본 `equals()`는 `==`와 똑같이 동작합니다. 즉, 재정의하지 않으면 "내용이 같은가"가 아니라 "같은 객체인가"를 묻습니다.
+
+```java
+public class Point {
+    private final int x, y;
+    public Point(int x, int y) { this.x = x; this.y = y; }
+}
+
+Point a = new Point(1, 2);
+Point b = new Point(1, 2);
+
+a == b          // false (다른 객체)
+a.equals(b)     // false (재정의하지 않았으므로 == 와 같음)
+```
+
+좌표가 같으면 같은 점으로 취급하고 싶다면 `equals()`를 재정의해야 합니다.
+
+```java
+@Override
+public boolean equals(Object o) {
+    if (this == o) return true;                      // 같은 객체면 바로 true
+    if (o == null || getClass() != o.getClass()) return false;
+    Point p = (Point) o;
+    return x == p.x && y == p.y;                     // 내용 비교
+}
+```
+
+---
+
+## 2. hashCode(): 값을 비교하기 전에 거치는 "1차 검사"
+
+`hashCode()`는 객체를 대표하는 정수 하나를 돌려줍니다. 기본 구현은 객체의 메모리 주소를 바탕으로 값을 만들기 때문에, 내용이 같아도 객체가 다르면 다른 값이 나옵니다.
+
+이 값은 `HashMap`, `HashSet` 같은 **해시 기반 컬렉션**이 사용합니다. 이 컬렉션들은 두 객체가 같은지 판단할 때 처음부터 `equals()`를 호출하지 않습니다. 먼저 해시 코드를 비교하고, **해시 코드가 같은 경우에만 `equals()`로 실제 값을 비교합니다.**
+
+```
+두 객체 a, b 가 같은지 판단
+  1. a.hashCode() == b.hashCode() ?
+       다르다 → 다른 객체로 확정. equals() 는 호출하지 않는다.
+       같다   → 2단계로
+  2. a.equals(b) ?
+       true  → 같은 객체
+       false → 다른 객체 (해시 충돌)
+```
+
+정수 비교는 매우 빠르고 `equals()`는 필드를 하나하나 비교해야 하므로, 해시 코드가 다른 대부분의 객체를 1단계에서 걸러 내면 비교 비용을 크게 줄일 수 있습니다.
+
+### 2.1 칸(bucket)으로 구현된다
+
+실제 구현에서는 이 1차 검사가 "칸 나누기"로 이루어집니다. 컬렉션은 해시 코드로 객체를 여러 칸 중 하나에 넣어 두고, 찾을 때도 해시 코드로 칸을 먼저 고릅니다. 그 칸 안의 객체들에 대해서만 해시 코드를 다시 확인하고 `equals()`를 호출합니다.
+
+```
+HashSet.contains(p)
+  → p.hashCode() 로 칸 번호 계산
+  → 그 칸에 있는 객체들 중 해시 코드가 같은 것과만 p.equals(...) 비교
+```
+
+칸이 다르면 해시 코드도 다르므로 `equals()`는 호출조차 되지 않습니다. 결국 "해시 코드가 같을 때만 값을 비교한다"는 원칙을 빠르게 실행하기 위한 자료 구조가 칸입니다.
+
+---
+
+## 3. 두 메서드 사이의 규약
+
+> **JVM 언어에서는 `equals()`가 `true`를 반환하는 두 객체는 반드시 같은 `hashCode()`를 반환해야 한다.**
+
+이 규약은 `Object.hashCode()`의 Javadoc에 명시되어 있으며, Java뿐 아니라 Kotlin, Scala 등 JVM 위에서 도는 모든 언어에 똑같이 적용됩니다.
+
+이유는 2장의 동작 방식에서 바로 나옵니다. 해시 컬렉션은 해시 코드가 같을 때만 `equals()`를 호출합니다. 내용이 같은 두 객체의 해시 코드가 다르면 1차 검사에서 "다른 객체"로 확정되어, 컬렉션은 `equals()`로 둘을 비교할 기회조차 갖지 못합니다.
+
+### 3.1 반대 방향은 성립하지 않는다
+
+규약은 한 방향입니다.
+
+| 조건 | 결론 |
+| --- | --- |
+| `equals()`가 `true` | `hashCode()`가 반드시 같아야 한다 |
+| `hashCode()`가 같음 | `equals()`가 `true`일 수도, `false`일 수도 있다 |
+
+서로 다른 객체가 같은 해시값을 갖는 것을 **해시 충돌(collision)** 이라고 하며, 이는 허용됩니다. 해시값은 정수 범위로 한정되어 있는데 객체는 무한히 많으므로 충돌은 피할 수 없습니다. 다만 충돌이 많아지면 한 칸에 객체가 몰려 `equals()` 비교가 늘어나므로 성능이 떨어집니다.
+
+---
+
+## 4. 규약을 어기면 생기는 일
+
+1장에서 `equals()`만 재정의한 `Point`를 `HashSet`에 넣어 보겠습니다.
+
+```java
+Set<Point> set = new HashSet<>();
+set.add(new Point(1, 2));
+
+set.contains(new Point(1, 2));   // false  ← equals() 는 true 인데도
+set.size();                      // 1
+set.add(new Point(1, 2));
+set.size();                      // 2      ← 같은 점이 두 번 들어감
+```
+
+`equals()`는 두 점을 같다고 판단하지만, `hashCode()`는 재정의하지 않아 메모리 주소 기반의 서로 다른 값을 돌려줍니다. 해시 코드가 다르므로 `HashSet`은 1차 검사에서 둘을 다른 객체로 확정하고, `equals()`는 호출되지 않습니다.
+
+`HashMap`의 키로 쓰면 더 눈에 띕니다. 분명히 넣은 값을 꺼내지 못합니다.
+
+```java
+Map<Point, String> map = new HashMap<>();
+map.put(new Point(1, 2), "A");
+
+map.get(new Point(1, 2));        // null
+```
+
+버그처럼 보이지만 컴파일러도 런타임도 아무 경고를 하지 않습니다. 규약을 어긴 책임은 전적으로 작성자에게 있습니다.
+
+---
+
+## 5. 올바르게 재정의하기
+
+규칙은 하나입니다. **`equals()`에서 비교한 필드를 `hashCode()`에서도 똑같이 사용한다.** 그러면 `equals()`가 `true`인 두 객체는 같은 필드 값을 가지므로 자연히 같은 해시값이 나옵니다.
+
+```java
+public class Point {
+    private final int x, y;
+    public Point(int x, int y) { this.x = x; this.y = y; }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Point p = (Point) o;
+        return x == p.x && y == p.y;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(x, y);      // equals 에서 쓴 필드와 동일
+    }
+}
+```
+
+`Objects.hash()`는 여러 필드를 조합해 해시값을 만들어 주는 표준 도구입니다. 직접 `31 * x + y` 같은 식을 쓰는 것과 같은 원리이지만 실수할 여지가 적습니다.
+
+### 5.1 직접 쓰지 않아도 되는 경우
+
+Java 16부터는 `record`를 쓰면 모든 필드를 기준으로 `equals()`와 `hashCode()`가 자동 생성됩니다.
+
+```java
+public record Point(int x, int y) { }
+```
+
+Kotlin의 `data class`도 같은 역할을 합니다. 주 생성자의 프로퍼티를 기준으로 두 메서드를 함께 만들어 주므로, 규약을 어길 일이 없습니다.
+
+```kotlin
+data class Point(val x: Int, val y: Int)
+```
+
+둘 다 "두 메서드를 반드시 같이, 같은 필드로 만들어야 한다"는 규약을 언어가 대신 지켜 주는 장치입니다.
+
+---
+
+## 6. toString(): 객체를 "어떻게 보여 줄까"
+
+`toString()`은 객체를 사람이 읽을 수 있는 문자열로 바꿉니다. `System.out.println(obj)`, 문자열 연결 `"점: " + obj`, 로그 출력, 디버거의 변수 창 등 객체를 글자로 표시해야 하는 모든 곳에서 자동으로 호출됩니다.
+
+기본 구현은 **클래스 이름 + `@` + `hashCode()`를 16진수로 바꾼 값**입니다.
+
+```java
+Point p = new Point(1, 2);
+System.out.println(p);       // Point@1b6d3586
+```
+
+`@` 뒤의 값이 바로 `hashCode()`의 결과입니다. 이 출력만 보고는 점의 좌표를 알 수 없으므로, 디버깅과 로그를 위해 내용을 보여 주도록 재정의합니다.
+
+```java
+@Override
+public String toString() {
+    return "Point(x=" + x + ", y=" + y + ")";
+}
+
+System.out.println(p);       // Point(x=1, y=2)
+```
+
+### 6.1 equals/hashCode와의 관계
+
+`toString()`은 3장의 규약에 묶이지 않습니다. 어떻게 재정의하든 컬렉션 동작에는 영향이 없습니다.
+
+그래도 세 메서드가 한 묶음으로 다뤄지는 이유는, 셋 모두 **"이 객체를 내용으로 다루겠다"** 는 같은 결정에서 나오기 때문입니다. 내용으로 비교하고(`equals`), 내용으로 분류하고(`hashCode`), 내용으로 보여 주는(`toString`) 것이 자연스럽게 함께 갑니다. 그래서 `record`와 `data class`도 셋을 한꺼번에 만들어 줍니다.
+
+```java
+public record Point(int x, int y) { }
+
+new Point(1, 2).toString();  // Point[x=1, y=2]
+```
+
+### 6.2 주의할 점
+
+- `toString()`의 출력 형식에 의존하는 코드를 작성하지 않습니다. 형식은 언제든 바뀔 수 있고, 데이터를 꺼내려면 getter를 써야 합니다.
+- 비밀번호, 토큰 같은 민감한 필드는 `toString()`에 포함하지 않습니다. 로그에 그대로 남기 때문입니다.
+
+---
+
+## 7. 정리
+
+| 메서드 | 역할 | 기본 구현 |
+| --- | --- | --- |
+| `equals()` | 두 객체의 내용이 같은지 판단 | `==` (같은 객체인지) |
+| `hashCode()` | 해시 컬렉션에서 어느 칸에 둘지 결정 | 메모리 주소 기반 |
+| `toString()` | 객체를 사람이 읽을 문자열로 표현 | `클래스명@hashCode(16진수)` |
+
+- 해시 컬렉션은 해시 코드를 먼저 비교하고, 해시 코드가 같은 경우에만 `equals()`로 실제 값을 비교합니다.
+- 따라서 `equals()`가 `true`인 두 객체는 반드시 같은 `hashCode()`를 돌려줘야 합니다.
+- `equals()`만 재정의하면 `HashSet`에 중복이 들어가고 `HashMap`에서 값을 찾지 못합니다.
+- 둘을 재정의할 때는 같은 필드를 사용하고, 가능하면 `record`나 `data class`에 맡깁니다.
+- `toString()`은 규약과 무관하지만, 객체를 내용으로 다루기로 했다면 함께 재정의하는 것이 자연스럽습니다.
