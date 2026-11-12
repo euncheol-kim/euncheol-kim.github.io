@@ -101,7 +101,7 @@
   }
 }
 
-/* Dark-mode accent: teal article links + softer inline code */
+/* Dark-mode accent: teal article links + inline code (글자는 본문색, 연한 배경만) */
 .dark .prose a {
   color: #4dd0c4;
   text-decoration-color: rgba(77, 208, 196, 0.4);
@@ -110,7 +110,8 @@
   color: #6fdcd2;
 }
 .dark .prose :not(pre) > code {
-  color: #ff7b72;
+  color: #e8ede9;
+  background-color: rgba(255, 255, 255, 0.1);
 }
 
 /* 이미지와 본문 간격 축소 — 이미지 문단 및 바로 앞뒤 문단의 맞닿는 여백만 좁힘

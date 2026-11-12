@@ -137,17 +137,18 @@ const config = {
             },
 
             // Inline code only
+            // 글자색은 본문과 같은 톤으로 두고, 연한 배경과 등폭 글꼴로만 구분한다.
+            // (채도 높은 빨간 글자는 한 문단에 여러 번 나오면 읽기 흐름을 끊고 눈을 피로하게 한다)
             ':not(pre) > code': {
-              fontWeight: 'inherit',
-              position: 'relative',
-              bottom: 1,
-              margin: '0 3px',
-              color: '#eb5757',
-              backgroundColor: 'rgba(135,131,120,0.15)',
+              fontWeight: 500,
+              fontSize: '0.9em',
+              margin: '0 2px',
+              color: '#1e293b',
+              backgroundColor: 'rgba(100,116,139,0.12)',
               fontFamily:
                 '"SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace',
-              borderRadius: 3,
-              padding: '0.2em 0.4em',
+              borderRadius: 4,
+              padding: '0.15em 0.4em',
               overflowWrap: 'break-word',
             },
 
