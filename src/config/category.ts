@@ -9,8 +9,9 @@ export const CATEGORY_GROUP_NAMES: Record<string, string> = {
   server: 'Server',
   data_storage: 'Data Storage',
   deploy: 'Deploy',
-  architecture: 'Architecture',
   cs: 'CS',
+  architecture: 'Architecture',
+  design_pattern: 'Design Pattern',
   programming_language: 'Programming Language',
   skill_sheet: 'Skill Sheet',
   etc: 'Etc',
@@ -20,7 +21,7 @@ export const CATEGORY_GROUP_NAMES: Record<string, string> = {
 // 여기에 있는 카테고리는 포스트가 없어도 항상 노출되고, 없는 카테고리는 마지막 줄 뒤에 붙는다.
 export const CATEGORY_GROUP_ROWS: string[][] = [
   ['project', 'error_handling', 'ai', 'client', 'server', 'data_storage', 'deploy'],
-  ['architecture', 'cs', 'programming_language', 'skill_sheet'],
+  ['cs', 'architecture', 'design_pattern', 'programming_language', 'skill_sheet'],
 ];
 
 export const PINNED_CATEGORY_GROUPS = CATEGORY_GROUP_ROWS.flat();
