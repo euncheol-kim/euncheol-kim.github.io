@@ -1,0 +1,311 @@
+---
+title: "Kotlin의 by: 내 일을 다른 객체에게 맡기는 위임(Delegation)"
+desc: "class Robot : Speaker by speaker와 val data by lazy { }는 생김새가 달라도 같은 by입니다. by가 뜻하는 위임이 무엇인지, 인터페이스 구현을 맡기는 클래스 위임과 getter/setter를 맡기는 프로퍼티 위임을 코드로 정리합니다."
+date: 2026-11-13 23:12
+thumbnail: ./thumbnail.webp
+isHot: false
+isVisible: true
+tags: kotlin, by, Delegation, lazy
+---
+
+### 🌱 포스팅 작성 이유
+
+Kotlin 코드를 읽다 보면 `by`가 전혀 다른 두 자리에 나옵니다.
+
+```kotlin
+class Shot(private val coffee: Coffee) : Coffee by coffee    // 클래스 선언에
+val config by lazy { load() }                                // 프로퍼티 선언에
+```
+
+생김새는 다르지만 둘 다 같은 뜻입니다. `by`가 무엇을 의미하는지, 두 자리에서 각각 어떻게 동작하는지 정리합니다.
+
+---
+
+## 1. by는 "맡긴다"는 뜻이다
+
+어떤 일을 직접 하지 않고 다른 객체에게 대신 시키는 것을 **위임(Delegation)** 이라고 합니다. 일을 맡는 쪽 객체를 **위임 객체(Delegate)** 라고 부릅니다.
+
+`A by B`는 **"A가 해야 할 일을 B에게 맡긴다"** 로 읽으면 됩니다.
+
+| 종류 | 형태 | 무엇을 맡기는가 |
+| --- | --- | --- |
+| 클래스 위임 | `class Robot : Speaker by speaker` | 인터페이스의 메서드 구현 |
+| 프로퍼티 위임 | `val data by lazy { ... }` | 프로퍼티의 getter와 setter |
+
+### 1.1 by 뒤에는 "위임 객체가 나오는 식"이 온다
+
+`by` 뒤에 오는 것은 특별한 문법이 아니라 평범한 **식**입니다. 계산한 결과가 위임 객체이기만 하면 됩니다.
+
+| by 뒤의 형태 | 예시 | 위임 객체 |
+| --- | --- | --- |
+| 변수 | `by speaker`, `by map` | 그 변수가 가리키는 객체 |
+| 생성자 호출 | `by Korean()`, `by Trimmed()` | 새로 만들어진 객체 |
+| 함수 호출 | `by lazy { ... }`, `by Delegates.observable(...) { ... }` | 함수가 돌려준 객체 |
+
+`lazy`나 `Delegates.observable`은 키워드가 아니라 **위임 객체를 만들어 돌려주는 함수**입니다. 이 글에 나오는 모든 `by`는 위 세 형태 중 하나입니다.
+
+---
+
+## 2. 클래스 위임: 인터페이스 구현을 맡긴다
+
+### 2.1 by가 없을 때
+
+인사를 하는 인터페이스와 그 구현이 있습니다.
+
+```kotlin
+interface Speaker {
+    fun hello(): String
+    fun bye(): String
+}
+
+class Korean : Speaker {
+    override fun hello() = "안녕하세요"
+    override fun bye() = "안녕히 가세요"
+}
+```
+
+`Robot`도 `Speaker`로 만들고 싶은데, 말하는 방법은 새로 만들지 않고 이미 있는 `Speaker`에게 시키고 싶습니다. 그러면 메서드마다 "그대로 넘긴다"는 코드를 써야 합니다.
+
+```kotlin
+class Robot(private val speaker: Speaker) : Speaker {
+    override fun hello() = speaker.hello()    // 그대로 넘긴다
+    override fun bye() = speaker.bye()        // 그대로 넘긴다
+}
+```
+
+메서드가 2개라 참을 만하지만, 10개라면 똑같은 모양의 코드를 10줄 써야 합니다.
+
+### 2.2 by를 쓰면
+
+```kotlin
+class Robot(speaker: Speaker) : Speaker by speaker
+```
+
+`Speaker by speaker`는 **"`Speaker`의 모든 메서드를 `speaker`에게 맡긴다"** 는 뜻입니다. 2.1에서 손으로 쓴 전달 코드를 컴파일러가 대신 만들어 줍니다.
+
+```kotlin
+val robot = Robot(Korean())
+
+robot.hello()    // 안녕하세요
+robot.bye()      // 안녕히 가세요
+```
+
+`by` 뒤에 생성자 파라미터를 쓰는 경우가 가장 흔하지만, 1.1에서 본 것처럼 식이면 무엇이든 됩니다.
+
+```kotlin
+class A(speaker: Speaker) : Speaker by speaker                                    // 변수
+class B : Speaker by Korean()                                                     // 생성자 호출
+class C(english: Boolean) : Speaker by (if (english) English() else Korean())    // 조건식
+```
+
+이 식은 **객체가 만들어질 때 한 번** 계산되고, 그 결과가 위임 객체로 보관됩니다.
+
+### 2.3 일부만 직접 구현하기
+
+맡기지 않고 직접 하고 싶은 메서드만 `override`하면 됩니다. 나머지는 계속 위임 객체가 처리합니다.
+
+```kotlin
+class LoudRobot(private val speaker: Speaker) : Speaker by speaker {
+    override fun hello() = speaker.hello() + "!!!"
+}
+
+val robot = LoudRobot(Korean())
+
+robot.hello()    // 안녕하세요!!!     ← 직접 구현한 것
+robot.bye()      // 안녕히 가세요     ← speaker에게 맡긴 것
+```
+
+기존 객체를 감싸서 일부 동작만 바꾸는 [데코레이터 패턴](/blog/design_pattern/decorator_pattern)을 만들 때 이 문법이 그대로 쓰입니다.
+
+### 2.4 주의: 위임 객체는 내가 바꾼 메서드를 모른다
+
+위임 객체 안에서 자기 메서드를 부를 때는 **위임 객체 자신의 것**이 불립니다. 바깥에서 `override`한 것이 불리지 않습니다.
+
+```kotlin
+interface Greeter {
+    fun name(): String
+    fun greet(): String
+}
+
+class Basic : Greeter {
+    override fun name() = "기본"
+    override fun greet() = "저는 ${name()}입니다"    // 자기 자신의 name()을 부른다
+}
+
+class Custom(greeter: Greeter) : Greeter by greeter {
+    override fun name() = "커스텀"
+}
+
+val custom = Custom(Basic())
+
+custom.name()     // 커스텀
+custom.greet()    // 저는 기본입니다     ← "커스텀"이 아니다
+```
+
+`greet()`은 `Basic`에게 맡겨졌고, `Basic`은 `Custom`이 `name()`을 바꿨다는 사실을 알지 못합니다. 상속이었다면 "저는 커스텀입니다"가 나왔을 것입니다. 위임은 상속과 달리 **두 객체가 서로 별개**이기 때문입니다.
+
+---
+
+## 3. 프로퍼티 위임: getter와 setter를 맡긴다
+
+### 3.1 개념
+
+Kotlin의 프로퍼티는 읽을 때 getter가, 쓸 때 setter가 호출됩니다. 프로퍼티 위임은 이 둘을 다른 객체에게 맡깁니다.
+
+```kotlin
+val 이름: 타입 by 위임객체
+```
+
+| 동작 | 실제로 일어나는 일 |
+| --- | --- |
+| 프로퍼티를 읽는다 | 위임 객체의 `getValue()`가 호출된다 |
+| 프로퍼티에 쓴다 | 위임 객체의 `setValue()`가 호출된다 |
+
+값을 어디에 보관하고 언제 계산할지를 위임 객체가 결정합니다. 자주 쓰는 위임 객체는 표준 라이브러리에 준비되어 있습니다.
+
+### 3.2 by lazy: 처음 읽을 때 한 번만 계산한다
+
+```kotlin
+class Report {
+    val data: String by lazy {
+        println("계산 중...")
+        "결과"
+    }
+}
+
+val report = Report()
+println("생성 완료")
+println(report.data)
+println(report.data)
+```
+
+```text
+생성 완료
+계산 중...
+결과
+결과
+```
+
+객체를 만들 때는 계산하지 않습니다. `data`를 **처음 읽는 순간** 블록이 실행되어 값이 저장되고, 두 번째부터는 저장된 값을 그대로 돌려줍니다. "계산 중..."이 한 번만 찍힌 이유입니다.
+
+만드는 데 비용이 크고, 쓰일지 안 쓰일지 모르는 값에 사용합니다. 한 번 정해지면 바뀌지 않으므로 `val`에만 쓸 수 있습니다.
+
+### 3.3 Delegates.observable: 값이 바뀔 때마다 알려 준다
+
+```kotlin
+import kotlin.properties.Delegates
+
+class User {
+    var name: String by Delegates.observable("철수") { _, old, new ->
+        println("$old → $new")
+    }
+}
+
+val user = User()
+user.name = "영희"    // 철수 → 영희
+user.name = "민수"    // 영희 → 민수
+```
+
+`Delegates.observable(...)`은 함수 호출입니다. `Delegates`는 표준 라이브러리의 객체이고, `observable`은 그 안에 있는 함수로 위임 객체를 만들어 돌려줍니다.
+
+이 함수의 인자는 두 개입니다. Kotlin에서는 마지막 인자가 코드 블록(람다)이면 괄호 밖으로 빼서 쓸 수 있기 때문에, 아래 두 줄은 같은 코드입니다.
+
+```kotlin
+Delegates.observable("철수") { _, old, new -> println("$old → $new") }
+Delegates.observable("철수", { _, old, new -> println("$old → $new") })
+```
+
+| 인자 | 의미 |
+| --- | --- |
+| `"철수"` | 초기값 |
+| `{ _, old, new -> ... }` | 값이 바뀔 때마다 실행할 블록. 이전 값(`old`)과 새 값(`new`)을 받는다 |
+
+3.2의 `lazy { ... }`도 같은 문법입니다. 블록 하나를 인자로 받는 함수 호출입니다.
+
+### 3.4 by map: Map에서 값을 꺼낸다
+
+```kotlin
+class Config(map: Map<String, Any>) {
+    val host: String by map
+    val port: Int by map
+}
+
+val config = Config(mapOf("host" to "localhost", "port" to 8080))
+
+config.host    // localhost
+config.port    // 8080
+```
+
+**프로퍼티 이름을 Key로** 삼아 Map에서 값을 찾습니다. `config.host`는 `map["host"]`를 읽는 것과 같습니다. JSON처럼 Key-Value로 들어온 데이터를 객체처럼 다루고 싶을 때 씁니다.
+
+### 3.5 표준 위임 객체 정리
+
+| 위임 객체 | 동작 |
+| --- | --- |
+| `lazy { }` | 처음 읽을 때 한 번 계산하고 저장한다 |
+| `Delegates.observable(초기값) { }` | 값이 바뀔 때마다 블록을 실행한다 |
+| `Delegates.vetoable(초기값) { }` | 블록이 `false`를 돌려주면 변경을 거부한다 |
+| `Delegates.notNull()` | 초기값 없이 선언하고, 값을 넣기 전에 읽으면 예외가 난다 |
+| `Map` | 프로퍼티 이름을 Key로 값을 꺼낸다 |
+
+### 3.6 위임 객체 직접 만들기
+
+위임 객체는 특별한 것이 아닙니다. **`getValue()`와 `setValue()`를 가진 객체**면 무엇이든 `by` 뒤에 올 수 있습니다.
+
+```kotlin
+import kotlin.reflect.KProperty
+
+class Trimmed {
+    private var value = ""
+
+    operator fun getValue(thisRef: Any?, property: KProperty<*>): String = value
+
+    operator fun setValue(thisRef: Any?, property: KProperty<*>, newValue: String) {
+        value = newValue.trim()    // 저장할 때 앞뒤 공백을 제거한다
+    }
+}
+
+class Form {
+    var title: String by Trimmed()
+}
+
+val form = Form()
+form.title = "   안녕   "
+
+form.title    // "안녕"
+```
+
+`form.title = "   안녕   "`은 `Trimmed`의 `setValue()`를 부르고, `form.title`을 읽으면 `getValue()`를 부릅니다.
+
+| 파라미터 | 의미 |
+| --- | --- |
+| `thisRef` | 프로퍼티를 가진 객체. 여기서는 `form` |
+| `property` | 프로퍼티 자체의 정보. `property.name`으로 이름(`"title"`)을 알 수 있다 |
+
+`val` 프로퍼티라면 `getValue()`만 있으면 됩니다. 3.2의 `lazy`도 내부에 `getValue()`를 가진 객체를 돌려주는 함수일 뿐입니다.
+
+---
+
+## 4. 두 by 비교
+
+| | 클래스 위임 | 프로퍼티 위임 |
+| --- | --- | --- |
+| 위치 | 클래스 선언의 인터페이스 뒤 | 프로퍼티 선언의 타입 뒤 |
+| 맡기는 것 | 인터페이스의 메서드 구현 | getter와 setter |
+| 위임 객체의 조건 | 그 인터페이스를 구현한 객체 | `getValue()`(와 `setValue()`)를 가진 객체 |
+| 줄여 주는 코드 | 메서드마다 쓰는 전달 코드 | 프로퍼티마다 반복되는 getter/setter 로직 |
+
+---
+
+## 5. 마무리
+
+`by`는 **"이 일을 저 객체에게 맡긴다"** 는 한 가지 뜻입니다. 클래스 선언에 쓰면 인터페이스 구현을 통째로 맡기고, 프로퍼티 선언에 쓰면 값을 읽고 쓰는 방법을 맡깁니다.
+
+두 경우 모두 컴파일러가 "맡긴다"에 해당하는 반복 코드를 대신 만들어 줍니다. 처음 보는 `by` 코드를 만나면 "무엇을, 누구에게 맡겼는가"를 찾으면 됩니다.
+
+---
+
+#### 📕 Reference
+
+- Kotlin 공식 문서, [Delegation](https://kotlinlang.org/docs/delegation.html)
+- Kotlin 공식 문서, [Delegated properties](https://kotlinlang.org/docs/delegated-properties.html)
