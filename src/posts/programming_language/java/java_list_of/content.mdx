@@ -1,0 +1,236 @@
+---
+title: "Java List.of(): 변경할 수 없는 리스트와 타입 추론"
+desc: "List.of()로 만든 리스트는 추가, 수정, 삭제가 모두 막혀 있습니다. 왜 이런 리스트가 유용한지, Arrays.asList()나 Collections.unmodifiableList()와는 무엇이 다른지, 그리고 서로 다른 타입을 넣었을 때 컴파일러가 공통 상위 타입을 찾는 방식을 정리합니다."
+date: 2026-11-13 20:58
+thumbnail: ./thumbnail.webp
+isHot: false
+isVisible: true
+tags: java, List, Immutable, Type Inference
+---
+
+### 🌱 포스팅 작성 이유
+
+`List.of()`는 리스트를 한 줄로 만드는 편리한 문법 정도로 보이지만, 실제로는 **변경할 수 없는 리스트**를 만든다는 점이 더 중요합니다. 데이터가 바뀌지 않는다고 보장되면 코드가 훨씬 안전해집니다.
+
+또한 `List.of(1, 2.0)`처럼 서로 다른 타입을 넣으면 컴파일러가 공통 상위 타입을 찾아 리스트의 타입을 정합니다. 이 두 가지를 정리합니다.
+
+---
+
+## 1. List.of란
+
+`List.of()`는 Java 9에 추가된 메서드로, 넘겨준 원소들로 리스트를 만들어 돌려줍니다.
+
+```java
+// Java 8까지
+List<String> names = new ArrayList<>();
+names.add("철수");
+names.add("영희");
+
+// Java 9부터
+List<String> names = List.of("철수", "영희");
+```
+
+겉으로는 코드가 짧아진 것뿐이지만, 두 리스트는 성격이 다릅니다. 위쪽은 언제든 바꿀 수 있는 리스트이고, 아래쪽은 **만든 뒤에는 바꿀 수 없는 리스트**입니다.
+
+---
+
+## 2. 변경할 수 없는 리스트
+
+### 2.1 추가, 수정, 삭제가 모두 막힌다
+
+```java
+List<String> names = List.of("철수", "영희");
+
+names.add("민수");       // ❌ UnsupportedOperationException
+names.set(0, "민수");    // ❌ UnsupportedOperationException
+names.remove(0);         // ❌ UnsupportedOperationException
+
+names.get(0);            // ✅ "철수"
+names.size();            // ✅ 2
+names.contains("영희");  // ✅ true
+```
+
+읽는 메서드는 모두 동작하고, 내용을 바꾸는 메서드는 호출하는 순간 예외가 납니다. 컴파일은 되고 **실행 중에** 예외가 난다는 점에 주의해야 합니다.
+
+### 2.2 null을 넣을 수 없다
+
+```java
+List.of("철수", null);                  // ❌ NullPointerException
+List.of("철수").contains(null);         // ❌ NullPointerException
+```
+
+원소로 `null`을 넣을 수 없고, `null`이 들어 있는지 물어보는 것조차 예외입니다. `List.of()`로 만든 리스트에는 `null`이 없다고 믿고 쓸 수 있습니다.
+
+### 2.3 주의: 원소 자체가 바뀌는 것은 막지 못한다
+
+`List.of()`가 막는 것은 **리스트의 구성**(무엇이 몇 번째에 들어 있는지)입니다. 안에 든 객체의 내부 상태까지 막아 주지는 않습니다.
+
+```java
+List<StringBuilder> list = List.of(new StringBuilder("a"));
+
+list.get(0).append("!");     // ✅ 예외 없음
+System.out.println(list);    // [a!]
+```
+
+리스트는 여전히 같은 `StringBuilder` 하나를 담고 있으므로 규칙을 어긴 것이 아닙니다. 완전히 변하지 않는 리스트를 원한다면 원소도 `String`, `Integer`, `record`처럼 변하지 않는 타입이어야 합니다.
+
+---
+
+## 3. 왜 변경할 수 없는 리스트가 좋은가
+
+| 이점 | 설명 |
+| --- | --- |
+| 안심하고 넘길 수 있다 | 다른 메서드나 객체에 넘겨도 그쪽에서 내용을 바꿀 수 없다 |
+| 원인 추적이 쉽다 | "누가 이 리스트를 바꿨는가"를 찾을 일이 없다. 바꿀 수 있는 코드가 없기 때문이다 |
+| 의도가 드러난다 | 읽는 사람이 "이 값은 고정이구나"를 바로 알 수 있다 |
+| 여러 스레드가 함께 읽어도 된다 | 바뀌지 않으므로 동시에 읽어도 문제가 없다 |
+
+변경 가능한 리스트를 외부에 그대로 넘기면, 받은 쪽에서 `clear()` 한 번으로 내 객체의 상태를 망가뜨릴 수 있습니다. 이 문제는 [데이터 가변성 통제와 방어적 복사](/blog/programming_concept/defensive_copy) 글에서 자세히 다뤘습니다.
+
+고정된 값의 목록이라면 처음부터 `List.of()`로 만들고, 바꿔야 할 이유가 생겼을 때만 `ArrayList`를 쓰는 편이 안전합니다.
+
+```java
+List<String> fixed = List.of("a", "b");
+List<String> editable = new ArrayList<>(fixed);   // 바꿔야 한다면 복사해서 쓴다
+editable.add("c");                                // ✅ fixed는 그대로다
+```
+
+---
+
+## 4. 비슷한 메서드와의 차이
+
+리스트를 "못 바꾸게" 만드는 방법은 여러 가지이고, 막아 주는 범위가 서로 다릅니다.
+
+| 메서드 | 추가/삭제 | 수정(`set`) | `null` | 원본이 바뀌면 |
+| --- | --- | --- | --- | --- |
+| `List.of(...)` | ❌ | ❌ | ❌ | 영향 없음 (복사) |
+| `List.copyOf(list)` | ❌ | ❌ | ❌ | 영향 없음 (복사) |
+| `Arrays.asList(...)` | ❌ | ✅ | ✅ | 같이 바뀐다 |
+| `Collections.unmodifiableList(list)` | ❌ | ❌ | ✅ | 같이 바뀐다 |
+
+### 4.1 Arrays.asList는 수정이 된다
+
+```java
+List<String> list = Arrays.asList("a", "b");
+
+list.set(0, "z");    // ✅ 수정은 된다
+list.add("c");       // ❌ UnsupportedOperationException
+```
+
+`Arrays.asList()`는 크기만 고정될 뿐 내용은 바꿀 수 있습니다. 변경할 수 없는 리스트가 아닙니다.
+
+### 4.2 unmodifiableList는 원본을 따라 바뀐다
+
+```java
+List<String> source = new ArrayList<>(List.of("a"));
+
+List<String> view = Collections.unmodifiableList(source);
+List<String> copy = List.copyOf(source);
+
+source.add("b");
+
+System.out.println(view);    // [a, b]  ← 원본을 따라 바뀜
+System.out.println(copy);    // [a]     ← 그대로
+```
+
+`Collections.unmodifiableList()`는 원본을 복사하지 않고 **읽기 전용 창문**만 씌웁니다. `view`를 통해서는 못 바꾸지만, 원본 `source`를 가진 쪽이 바꾸면 `view`에도 그대로 보입니다.
+
+이미 있는 리스트를 변경할 수 없는 리스트로 만들고 싶다면 `List.copyOf()`(Java 10)를 쓰면 됩니다. 그 시점의 내용을 복사하므로 원본과 관계가 끊어집니다.
+
+---
+
+## 5. 서로 다른 타입을 넣으면: 공통 상위 타입 추론
+
+`List.of()`의 선언은 다음과 같습니다.
+
+```java
+static <E> List<E> of(E e1, E e2)
+```
+
+원소의 타입 `E`는 하나입니다. 그런데 서로 다른 타입을 넣어도 컴파일이 됩니다.
+
+```java
+List.of(1, 2.0);    // Integer와 Double을 함께 넣었다
+```
+
+이때 컴파일러는 **넣은 원소들이 공통으로 가진 상위 타입**을 찾아 그것을 `E`로 정합니다. 이것을 타입 추론(Type Inference)이라고 하며, 실행 중이 아니라 컴파일할 때 일어납니다.
+
+### 5.1 상속 관계가 있는 클래스
+
+```java
+class Animal {}
+class Dog extends Animal {}
+class Cat extends Animal {}
+
+var animals = List.of(new Dog(), new Cat());   // List<Animal>
+Animal first = animals.get(0);                 // ✅
+```
+
+`Dog`와 `Cat`은 서로 다른 타입이지만 둘 다 `Animal`입니다. 컴파일러는 둘을 모두 담을 수 있는 가장 구체적인 타입인 `Animal`을 골라 `List<Animal>`로 만듭니다.
+
+`Object`도 둘의 공통 상위 타입이지만, 더 구체적인 `Animal`이 있으므로 `Object`까지 올라가지 않습니다.
+
+### 5.2 Integer와 Double
+
+```java
+List<Number> numbers = List.of(1, 2.0);    // ✅
+Number first = numbers.get(0);             // ✅ 1
+```
+
+`Integer`와 `Double`의 공통 상위 타입은 `Number`이므로 `List<Number>`로 받을 수 있습니다.
+
+반대로 공통 상위 타입이 아닌 타입으로 받으려 하면 컴파일 에러가 납니다.
+
+```java
+List<Integer> numbers = List.of(1, 2.0);
+// ❌ incompatible types: inference variable E has incompatible bounds
+//      equality constraints: Integer
+//      lower bounds: Double,Integer
+```
+
+에러 메시지는 "`E`가 `Integer`여야 한다고 했는데, 넣은 값은 `Double`과 `Integer`다"라는 뜻입니다.
+
+### 5.3 var보다 타입을 직접 적는 편이 낫다
+
+5.2에서 `var`로 받으면 결과가 조금 달라집니다.
+
+```java
+var mixed = List.of(1, 2.0);
+
+Number first = mixed.get(0);          // ✅
+List<Number> numbers = mixed;         // ❌ 컴파일 에러
+```
+
+`Integer`와 `Double`은 `Number`일 뿐 아니라 둘 다 `Comparable`도 구현하고 있습니다. 컴파일러는 공통점을 빠짐없이 찾기 때문에, `mixed`의 타입은 `List<Number>`가 아니라 "`Number`이면서 `Comparable`이기도 한 타입의 리스트"가 됩니다. 이 타입은 코드로 직접 적을 수 없고 `List<Number>`와도 다른 타입입니다.
+
+반면 왼쪽에 `List<Number>`라고 적어 주면, 컴파일러는 그 타입에 맞춰 `E`를 `Number`로 정합니다.
+
+| 선언 | `E`가 정해지는 방식 | 결과 |
+| --- | --- | --- |
+| `var x = List.of(1, 2.0)` | 원소들만 보고 공통점을 모두 찾는다 | 이름 없는 복잡한 타입 |
+| `List<Number> x = List.of(1, 2.0)` | 받는 쪽 타입을 먼저 보고, 원소가 거기에 맞는지 확인한다 | `List<Number>` |
+
+서로 다른 타입을 섞어 넣을 때는 받는 쪽 타입을 직접 적는 것이 읽기에도 좋고 안전합니다.
+
+### 5.4 공통점이 없으면 Object까지 올라간다
+
+```java
+List<Object> things = List.of(1, "a");    // ✅ 컴파일은 된다
+```
+
+`Integer`와 `String`은 상속 관계에서 `Object` 말고는 만나는 곳이 없습니다. 컴파일은 되지만, 꺼낼 때마다 실제 타입을 확인해야 하므로 타입을 지정하는 의미가 사라집니다.
+
+```java
+String s = things.get(1);              // ❌ 컴파일 에러: Object는 String이 아니다
+String s = (String) things.get(1);     // 형변환이 필요하고, 틀리면 실행 중에 예외
+```
+
+공통 상위 타입이 `Object`뿐이라면 한 리스트에 담을 데이터가 아닐 가능성이 높습니다.
+
+---
+
+## 6. 마무리
+
+`List.of()`는 **추가, 수정, 삭제가 모두 막히고 `null`도 없는 리스트**를 만듭니다. 고정된 목록은 `List.of()`로, 이미 있는 리스트를 고정하고 싶을 때는 `List.copyOf()`로 만들면 됩니다. 다만 원소 객체의 내부 상태까지 막아 주지는 않으므로, 원소도 변하지 않는 타입을 쓰는 것이 좋습니다.
+
+서로 다른 타입을 넣으면 컴파일러가 **공통 상위 타입**을 찾아 리스트의 타입을 정합니다. 이때는 `var` 대신 `List<Number>`처럼 받는 타입을 직접 적어 두면 의도한 타입으로 정확히 정해집니다.
