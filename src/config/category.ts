@@ -7,7 +7,7 @@ export const CATEGORY_GROUP_NAMES: Record<string, string> = {
   ai: 'AI',
   client: 'Client',
   server: 'Server',
-  data_storage: 'Data Storage',
+  database: 'Database',
   deploy: 'Deploy',
   cs: 'CS',
   architecture: 'Architecture',
@@ -20,7 +20,7 @@ export const CATEGORY_GROUP_NAMES: Record<string, string> = {
 // 고정 상위 카테고리의 줄 구성. 각 배열이 카테고리 탭의 한 줄이며, 첫 줄은 All, 추천 뒤에 이어진다.
 // 여기에 있는 카테고리는 포스트가 없어도 항상 노출되고, 없는 카테고리는 마지막 줄 뒤에 붙는다.
 export const CATEGORY_GROUP_ROWS: string[][] = [
-  ['project', 'error_handling', 'ai', 'client', 'server', 'data_storage', 'deploy'],
+  ['project', 'error_handling', 'ai', 'client', 'server', 'database', 'deploy'],
   ['cs', 'architecture', 'design_pattern', 'programming_language', 'skill_sheet'],
 ];
 
