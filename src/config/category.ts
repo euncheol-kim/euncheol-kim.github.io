@@ -28,6 +28,8 @@ export const PINNED_CATEGORY_GROUPS = CATEGORY_GROUP_ROWS.flat();
 
 // 하위 카테고리 표시 이름. 폴더명으로 만든 이름(dir_name -> Dir Name)이 어색할 때만 지정한다.
 export const CATEGORY_PUBLIC_NAMES: Record<string, string> = {
+  design_pattern: 'design pattern',
   fast_api: 'Fast API',
   hirecore: 'HireCore',
+  skill_sheet: 'skill sheet',
 };

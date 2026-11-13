@@ -6,12 +6,15 @@ import {
 } from '@/config/category';
 import { CategoryDetail, CategoryGroupDetail, HeadingItem, Post, PostMatter, SearchablePost } from '@/config/types';
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
 import fs from 'fs';
 import GithubSlugger from 'github-slugger';
 import { sync } from 'glob';
 import matter from 'gray-matter';
 import path from 'path';
 import readingTime from 'reading-time';
+
+dayjs.extend(utc);
 
 const BASE_PATH = 'src/posts';
 const POSTS_PATH = path.join(process.cwd(), BASE_PATH);
@@ -56,18 +59,32 @@ export const parsePostAbstract = (postPath: string) => {
   return { url, groupPath, categoryPath, categoryPublicName, slug };
 };
 
+// frontmatter의 date 해석. `2026-11-13`처럼 날짜만 적거나 `2026-11-13 13:26`처럼 한국 시각을 함께 적을 수 있다.
+// 시각을 적으면 같은 날 작성한 포스트끼리의 정렬 순서가 정해진다.
+const parsePostDate = (raw: Date | string): Date => {
+  if (raw instanceof Date) return raw;
+  const matched = String(raw)
+    .trim()
+    .match(/^(\d{4}-\d{2}-\d{2})[ T](\d{1,2}):(\d{2})$/);
+  if (!matched) throw new Error(`date 형식이 올바르지 않습니다: ${raw}`);
+  const [, day, hour, minute] = matched;
+  return new Date(`${day}T${hour.padStart(2, '0')}:${minute}:00+09:00`);
+};
+
 // MDX detail
 const parsePostDetail = async (postPath: string) => {
   const file = fs.readFileSync(postPath, 'utf8');
   const { data, content } = matter(file);
   const grayMatter = data as PostMatter;
   const readingMinutes = Math.ceil(readingTime(content).minutes);
-  const dateString = dayjs(grayMatter.date).locale('ko').format('YYYY년 MM월 DD일');
+  const date = parsePostDate(grayMatter.date);
+  // 빌드 환경의 시간대와 무관하게 한국 시간 기준 날짜로 표시한다.
+  const dateString = dayjs(date).utcOffset(9).locale('ko').format('YYYY년 MM월 DD일');
   const isVisible = grayMatter.isVisible !== false;
   const tags = grayMatter.tags
     ? grayMatter.tags.split(',').map((t) => t.trim()).filter(Boolean)
     : [];
-  return { ...grayMatter, dateString, content, readingMinutes, isVisible, tags };
+  return { ...grayMatter, date, dateString, content, readingMinutes, isVisible, tags };
 };
 
 // category folder name을 public name으로 변경 : dir_name -> Dir Name
@@ -183,7 +200,7 @@ export const getCategoryGroupDetailList = async (): Promise<CategoryGroupDetail[
       );
       const children = detailList
         .filter((detail) => categorySet.has(detail.dirName))
-        .sort((a, b) => b.count - a.count);
+        .sort((a, b) => a.publicName.localeCompare(b.publicName, 'en', { sensitivity: 'base' }));
       const count = children.reduce((sum, detail) => sum + detail.count, 0);
       return {
         id: groupPath,
