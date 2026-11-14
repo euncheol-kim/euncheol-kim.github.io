@@ -93,7 +93,7 @@ Kotlin은 **"모든 프로퍼티는 객체 생성이 끝난 순간 유효한 값
 | `init` 블록 | `init { age = compute() }` | 생성 시 여러 줄 로직으로 정한다 |
 | `lateinit var` | `lateinit var db: Database` | "나중에 반드시 넣겠다"고 약속한다. 넣기 전에 읽으면 예외 |
 | `by lazy` | `val config by lazy { load() }` | 처음 읽을 때 한 번 계산한다 |
-| 커스텀 getter | `val isAdult get() = age >= 19` | 저장하지 않고 계산하므로 초기화가 필요 없다 (4장) |
+| 커스텀 getter | `val isAdult get() = age >= 19` | 저장하지 않고 계산하므로 초기화가 필요 없다 |
 
 ### 3.1 초기화 식
 
@@ -119,13 +119,13 @@ Person()        // age = 0
 Person(30)      // age = 30
 ```
 
-이것은 "호출할 때 인자를 안 넘기면 쓸 값"이지, "프로퍼티를 선언만 하면 들어가는 값"이 아닙니다. 2장에서 말한 "기본값이 없다"는 후자를 뜻합니다.
+이것은 "호출할 때 인자를 안 넘기면 쓸 값"이지, "프로퍼티를 선언만 하면 들어가는 값"이 아닙니다. 앞에서 말한 "기본값이 없다"는 후자를 뜻합니다.
 
 ---
 
 ## 4. 초기화가 필요 없는 프로퍼티: 상자와 규칙
 
-2장의 규칙에는 예외처럼 보이는 경우가 있습니다. 아래 코드는 `=`가 없는데도 에러가 나지 않습니다.
+"선언만 하면 에러"라는 규칙에는 예외처럼 보이는 경우가 있습니다. 아래 코드는 `=`가 없는데도 에러가 나지 않습니다.
 
 ```kotlin
 class Person(val age: Int) {
@@ -148,7 +148,7 @@ val isAdult: Boolean = true
 val isAdult: Boolean        // ❌ 에러
 ```
 
-이 줄은 "`isAdult`라는 상자를 만들어라"까지만 말하고 뭘 넣을지 말하지 않았습니다. Java라면 빈 상자에 자동으로 `false`를 넣어 주지만, Kotlin은 빈 상자를 허용하지 않으므로 에러를 냅니다. 2장의 규칙이 바로 이것입니다.
+이 줄은 "`isAdult`라는 상자를 만들어라"까지만 말하고 뭘 넣을지 말하지 않았습니다. Java라면 빈 상자에 자동으로 `false`를 넣어 주지만, Kotlin은 빈 상자를 허용하지 않으므로 에러를 냅니다. "선언만 하면 에러"라는 규칙이 바로 이것입니다.
 
 ### 4.2 getter를 붙이면 규칙이 된다
 
@@ -163,7 +163,7 @@ val isAdult: Boolean        // ✅ 에러 아님
 
 ### 4.3 사실상 함수다
 
-4.2의 코드는 아래 함수와 거의 같습니다.
+getter를 붙인 위 코드는 아래 함수와 거의 같습니다.
 
 ```kotlin
 fun isAdult(): Boolean = age >= 19
@@ -183,7 +183,7 @@ fun isAdult(): Boolean = age >= 19
 
 ## 5. 상자의 정식 이름: Backing Field
 
-4장에서 "상자"라고 부른 것의 정식 이름은 **뒷받침하는 필드(Backing Field)** 입니다. 프로퍼티의 값이 실제로 저장되는 공간이며, 커스텀 getter/setter 안에서는 `field`라는 이름으로 이 공간에 접근합니다.
+앞에서 "상자"라고 부른 것의 정식 이름은 **뒷받침하는 필드(Backing Field)** 입니다. 프로퍼티의 값이 실제로 저장되는 공간이며, 커스텀 getter/setter 안에서는 `field`라는 이름으로 이 공간에 접근합니다.
 
 ```kotlin
 var age: Int = 0
@@ -200,11 +200,11 @@ var age: Int = 0
 1. getter나 setter를 직접 쓰지 않아서 **기본 접근자**를 사용한다.
 2. 직접 쓴 getter/setter 안에서 **`field`를 참조**한다.
 
-둘 다 아니면, 즉 접근자를 전부 직접 썼고 그 안에서 `field`를 한 번도 쓰지 않았다면 Backing Field는 생기지 않습니다. 4.2의 `isAdult`가 바로 이 경우입니다.
+둘 다 아니면, 즉 접근자를 전부 직접 썼고 그 안에서 `field`를 한 번도 쓰지 않았다면 Backing Field는 생기지 않습니다. getter만 가진 `isAdult`가 바로 이 경우입니다.
 
 ### 5.2 Backing Field가 없으면 초기화 식도 못 쓴다
 
-4장을 뒤집어 보면, 상자가 없는 프로퍼티에 값을 넣으려 해도 에러가 납니다.
+반대로, 상자가 없는 프로퍼티에 값을 넣으려 해도 에러가 납니다.
 
 ```kotlin
 val isAdult: Boolean = false   // ❌ Initializer is not allowed here

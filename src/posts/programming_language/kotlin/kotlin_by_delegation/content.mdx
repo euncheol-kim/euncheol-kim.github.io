@@ -81,7 +81,7 @@ class Robot(private val speaker: Speaker) : Speaker {
 class Robot(speaker: Speaker) : Speaker by speaker
 ```
 
-`Speaker by speaker`는 **"`Speaker`의 모든 메서드를 `speaker`에게 맡긴다"** 는 뜻입니다. 2.1에서 손으로 쓴 전달 코드를 컴파일러가 대신 만들어 줍니다.
+`Speaker by speaker`는 **"`Speaker`의 모든 메서드를 `speaker`에게 맡긴다"** 는 뜻입니다. 앞에서 손으로 쓴 전달 코드를 컴파일러가 대신 만들어 줍니다.
 
 ```kotlin
 val robot = Robot(Korean())
@@ -90,7 +90,7 @@ robot.hello()    // 안녕하세요
 robot.bye()      // 안녕히 가세요
 ```
 
-`by` 뒤에 생성자 파라미터를 쓰는 경우가 가장 흔하지만, 1.1에서 본 것처럼 식이면 무엇이든 됩니다.
+`by` 뒤에 생성자 파라미터를 쓰는 경우가 가장 흔하지만, 식이면 무엇이든 됩니다.
 
 ```kotlin
 class A(speaker: Speaker) : Speaker by speaker                                    // 변수
@@ -220,7 +220,7 @@ Delegates.observable("철수", { _, old, new -> println("$old → $new") })
 | `"철수"` | 초기값 |
 | `{ _, old, new -> ... }` | 값이 바뀔 때마다 실행할 블록. 이전 값(`old`)과 새 값(`new`)을 받는다 |
 
-3.2의 `lazy { ... }`도 같은 문법입니다. 블록 하나를 인자로 받는 함수 호출입니다.
+`lazy { ... }`도 같은 문법입니다. 블록 하나를 인자로 받는 함수 호출입니다.
 
 ### 3.4 by map: Map에서 값을 꺼낸다
 
@@ -282,7 +282,7 @@ form.title    // "안녕"
 | `thisRef` | 프로퍼티를 가진 객체. 여기서는 `form` |
 | `property` | 프로퍼티 자체의 정보. `property.name`으로 이름(`"title"`)을 알 수 있다 |
 
-`val` 프로퍼티라면 `getValue()`만 있으면 됩니다. 3.2의 `lazy`도 내부에 `getValue()`를 가진 객체를 돌려주는 함수일 뿐입니다.
+`val` 프로퍼티라면 `getValue()`만 있으면 됩니다. `lazy`도 내부에 `getValue()`를 가진 객체를 돌려주는 함수일 뿐입니다.
 
 ---
 
