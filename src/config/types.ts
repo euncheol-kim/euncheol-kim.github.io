@@ -46,6 +46,34 @@ export interface CategoryGroupDetail {
   children: CategoryDetail[];
 }
 
+export type GraphNodeType = 'post' | 'category';
+export type GraphLinkType = 'link' | 'category';
+
+export interface GraphNode {
+  id: string;
+  type: GraphNodeType;
+  label: string;
+  url: string; // 이동할 경로
+  // 아래는 글에만 있다
+  group?: string; // 속한 상위 카테고리의 id. 같은 값끼리 화면에서 한 영역으로 묶인다
+  sub?: string; // 하위 카테고리 표시 이름
+  desc?: string;
+  dateString?: string;
+  tags?: string[];
+}
+
+export interface GraphLink {
+  source: string;
+  target: string;
+  type: GraphLinkType; // link: 본문에서 다른 글로 건 링크, category: 글이 속한 하위 카테고리
+}
+
+export interface PostGraph {
+  nodes: GraphNode[];
+  links: GraphLink[];
+  groups: { id: string; label: string }[]; // 상위 카테고리. 화면에서 점들을 감싸는 영역이 된다
+}
+
 export interface HeadingItem {
   text: string;
   link: string;

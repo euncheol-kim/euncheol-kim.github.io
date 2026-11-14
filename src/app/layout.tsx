@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 
+import { GraphDrawer } from '@/components/graph/GraphDrawer';
 import { SearchDialog } from '@/components/search/SearchDialog';
 import { SearchProviderClient } from '@/components/search/SearchProvider';
 import { Toaster } from '@/components/ui/toaster';
@@ -8,6 +9,7 @@ import '@/config/globals.css';
 import { Footer } from '@/layouts/Footer';
 import { Header } from '@/layouts/Header';
 import { ThemeProvider } from '@/layouts/theme/Provider';
+import { getPostGraph } from '@/lib/graph';
 import { getSearchablePostList } from '@/lib/post';
 import { GoogleAnalytics, GoogleTagManager } from '@next/third-parties/google';
 import { Analytics } from '@vercel/analytics/react';
@@ -38,6 +40,7 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const searchPosts = await getSearchablePostList();
+  const graph = await getPostGraph();
 
   return (
     <html lang='en' className='h-full scroll-my-20 scroll-smooth' suppressHydrationWarning>
@@ -46,6 +49,7 @@ export default async function RootLayout({
           <SearchProviderClient posts={searchPosts}>
             <Header />
             <SearchDialog />
+            <GraphDrawer graph={graph} />
             <main className='mt-[40px] flex flex-1 flex-col sm:mt-[48px]'>{children}</main>
             <Footer />
           </SearchProviderClient>
