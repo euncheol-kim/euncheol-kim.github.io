@@ -13,8 +13,6 @@ interface CategoryListProps {
   currentGroup?: string;
 }
 
-const GROUP_VALUE_PREFIX = 'group:';
-
 const CategoryList = ({
   categoryGroupList,
   allPostCount,
@@ -24,31 +22,22 @@ const CategoryList = ({
 }: CategoryListProps) => {
   const router = useRouter();
 
-  // 하위 카테고리 페이지에서도 소속된 상위 카테고리가 펼쳐지도록 처리
-  const activeGroup = categoryGroupList.find((group) =>
-    currentGroup
-      ? group.id === currentGroup
-      : group.children.some((cg) => cg.dirName === currentCategory)
-  );
+  // 하위 카테고리 페이지에서도 소속된 상위 카테고리가 펼쳐진다
+  const activeGroup = categoryGroupList.find((group) => group.id === currentGroup);
+  const activeCategory = activeGroup?.children.find((cg) => cg.dirName === currentCategory);
+  const groupUrlOf = (groupId: string) => `/blog/groups/${groupId}`;
   // 설정된 줄 번호대로 상위 카테고리를 줄 단위로 묶는다 (첫 줄은 All, 추천과 함께 노출)
   const categoryRows = categoryGroupList.reduce<CategoryGroupDetail[][]>((rows, group) => {
     while (rows.length <= group.row) rows.push([]);
     rows[group.row].push(group);
     return rows;
   }, [[]]);
-  const selectValue = currentGroup ? `${GROUP_VALUE_PREFIX}${currentGroup}` : currentCategory;
+  // 모바일 select의 값은 이동할 주소다
+  const selectValue =
+    activeCategory?.url ??
+    (currentGroup ? groupUrlOf(currentGroup) : currentCategory === 'hot' ? '/blog/hot' : '/blog');
 
-  const onCategoryChange = (value: string) => {
-    if (value === 'all') {
-      router.push('/blog', { scroll: false });
-    } else if (value === 'hot') {
-      router.push('/blog/hot', { scroll: false });
-    } else if (value.startsWith(GROUP_VALUE_PREFIX)) {
-      router.push(`/blog/group/${value.replace(GROUP_VALUE_PREFIX, '')}`, { scroll: false });
-    } else {
-      router.push(`/blog/${value}`, { scroll: false });
-    }
-  };
+  const onCategoryChange = (url: string) => router.push(url, { scroll: false });
 
   return (
     <>
@@ -76,7 +65,7 @@ const CategoryList = ({
               {row.map((group) => (
                 <CategoryButton
                   key={group.id}
-                  href={`/blog/group/${group.id}`}
+                  href={groupUrlOf(group.id)}
                   displayName={group.name}
                   isCurrent={group.id === activeGroup?.id}
                   count={group.count}
@@ -92,9 +81,9 @@ const CategoryList = ({
               {activeGroup.children.map((cg) => (
                 <CategoryButton
                   key={cg.dirName}
-                  href={`/blog/${cg.dirName}`}
+                  href={cg.url}
                   displayName={cg.publicName}
-                  isCurrent={currentCategory === cg.dirName}
+                  isCurrent={cg.url === activeCategory?.url}
                   count={cg.count}
                   variant='secondary'
                 />
@@ -113,15 +102,15 @@ const CategoryList = ({
           aria-label='카테고리 선택'
           className='h-9 w-[240px] rounded-md border border-input bg-card px-3 text-sm font-medium'
         >
-          <option value='all'>All ({allPostCount})</option>
-          <option value='hot'>🔥추천 ({hotPostCount})</option>
+          <option value='/blog'>All ({allPostCount})</option>
+          <option value='/blog/hot'>🔥추천 ({hotPostCount})</option>
           {categoryGroupList.map((group) => (
             <optgroup key={group.id} label={group.name}>
-              <option value={`${GROUP_VALUE_PREFIX}${group.id}`}>
+              <option value={groupUrlOf(group.id)}>
                 {group.name} 전체 ({group.count})
               </option>
               {group.children.map((cg) => (
-                <option key={cg.dirName} value={cg.dirName}>
+                <option key={cg.dirName} value={cg.url}>
                   {cg.publicName} ({cg.count})
                 </option>
               ))}

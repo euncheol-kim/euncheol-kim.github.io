@@ -1,8 +1,9 @@
 import { GraphLink, GraphNode, PostGraph } from '@/config/types';
-import { getCategoryGroupPublicName, getSortedPostList } from '@/lib/post';
+import { getCategoryGroupPublicName, getCategoryUrl, getSortedPostList } from '@/lib/post';
 
-// 본문에서 다른 글로 건 링크 : [텍스트](/blog/{category}/{slug}) 또는 href="/blog/{category}/{slug}"
-const POST_LINK_REGEX = /(?:\]\(|href=["'])(\/blog\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+)(?=[)"'#?])/g;
+// 본문에서 다른 글로 건 링크 : [텍스트](/blog/groups/{group}/{category}/{slug}) 또는 href="..."
+const POST_LINK_REGEX =
+  /(?:\]\(|href=["'])(\/blog\/groups\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+)(?=[)"'#?])/g;
 
 // 포스트 그래프 데이터 : 글과 하위 카테고리를 노드로, 그 사이의 관계를 링크로 만든다.
 // 상위 카테고리는 노드가 아니라, 속한 노드들을 화면에서 한 영역으로 묶는 기준이다.
@@ -29,9 +30,11 @@ export const getPostGraph = async (): Promise<PostGraph> => {
       tags: post.tags,
     });
 
-    categoryNames.set(post.categoryPath, post.categoryPublicName);
-    groupOfCategory.set(post.categoryPath, post.groupPath);
-    links.push({ source: post.url, target: `category:${post.categoryPath}`, type: 'category' });
+    // 하위 카테고리는 주소로 구분한다 (상위 카테고리가 다르면 폴더명이 같아도 다른 카테고리다)
+    const categoryUrl = getCategoryUrl(post.groupPath, post.categoryPath);
+    categoryNames.set(categoryUrl, post.categoryPublicName);
+    groupOfCategory.set(categoryUrl, post.groupPath);
+    links.push({ source: post.url, target: `category:${categoryUrl}`, type: 'category' });
 
     for (const [, target] of Array.from(post.content.matchAll(POST_LINK_REGEX))) {
       const key = `${post.url}>${target}`;
@@ -48,13 +51,13 @@ export const getPostGraph = async (): Promise<PostGraph> => {
     if (post) node.group = groupIdOf(post.groupPath);
   }
 
-  categoryNames.forEach((label, categoryPath) => {
+  categoryNames.forEach((label, categoryUrl) => {
     nodes.push({
-      id: `category:${categoryPath}`,
+      id: `category:${categoryUrl}`,
       type: 'category',
       label,
-      url: `/blog/${categoryPath}`,
-      group: groupIdOf(groupOfCategory.get(categoryPath)!),
+      url: categoryUrl,
+      group: groupIdOf(groupOfCategory.get(categoryUrl)!),
     });
   });
 

@@ -20,11 +20,16 @@ const BASE_PATH = 'src/posts';
 const POSTS_PATH = path.join(process.cwd(), BASE_PATH);
 
 // 모든 MDX 파일 조회 : src/posts/{group}/{category}/{slug}/content.mdx
-export const getPostPaths = (category?: string) => {
-  const folder = category || '*';
-  const postPaths: string[] = sync(`${POSTS_PATH}/*/${folder}/*/*.mdx`);
+export const getPostPaths = (group?: string, category?: string) => {
+  const postPaths: string[] = sync(`${POSTS_PATH}/${group || '*'}/${category || '*'}/*/*.mdx`);
   return postPaths;
 };
+
+// 주소 체계 : /blog/groups/{group} > /blog/groups/{group}/{category} > /blog/groups/{group}/{category}/{slug}
+export const getGroupUrl = (group: string) => `/blog/groups/${group}`;
+export const getCategoryUrl = (group: string, category: string) => `${getGroupUrl(group)}/${category}`;
+export const getPostUrl = (group: string, category: string, slug: string) =>
+  `${getCategoryUrl(group, category)}/${slug}`;
 
 // MDX 파일 파싱 : abstract / detail 구분
 const parsePost = async (postPath: string): Promise<Post> => {
@@ -54,7 +59,7 @@ export const parsePostAbstract = (postPath: string) => {
     .replace('.mdx', '');
 
   const [groupPath, categoryPath, slug] = filePath.split('/');
-  const url = `/blog/${categoryPath}/${slug}`;
+  const url = getPostUrl(groupPath, categoryPath, slug);
   const categoryPublicName = getCategoryPublicName(categoryPath);
   return { url, groupPath, categoryPath, categoryPublicName, slug };
 };
@@ -101,8 +106,8 @@ const sortPostList = (PostList: Post[]) => {
 };
 
 // 모든 포스트 목록 조회. 블로그 메인 페이지에서 사용
-export const getPostList = async (category?: string): Promise<Post[]> => {
-  const postPaths = getPostPaths(category);
+export const getPostList = async (group?: string, category?: string): Promise<Post[]> => {
+  const postPaths = getPostPaths(group, category);
   const postList = await Promise.all(postPaths.map((postPath) => parsePost(postPath)));
   return postList.filter((post) => post.isVisible !== false);
 };
@@ -113,8 +118,8 @@ export const getHotPostList = async () => {
   return sortPostList(hotPostList);
 };
 
-export const getSortedPostList = async (category?: string) => {
-  const postList = await getPostList(category);
+export const getSortedPostList = async (group?: string, category?: string) => {
+  const postList = await getPostList(group, category);
   return sortPostList(postList);
 };
 
@@ -157,49 +162,32 @@ const getCategoryGroupRow = (groupPath: string) => {
 export const getCategoryGroupPublicName = (groupPath: string) =>
   CATEGORY_GROUP_NAMES[groupPath] ?? getCategoryPublicName(groupPath);
 
-// 하위 카테고리 폴더 목록. URL이 /blog/{category}/{slug}이므로 하위 카테고리명은 전체에서 유일해야 한다.
-export const getCategoryList = () => {
-  const cgList = getCategoryGroupList().flatMap((group) =>
-    getSubDirNames(path.join(POSTS_PATH, group))
+// 하위 카테고리 폴더 목록. 주소에 상위 카테고리가 들어가므로, 하위 카테고리명은 같은 상위 카테고리 안에서만 유일하면 된다.
+export const getCategoryList = () =>
+  getCategoryGroupList().flatMap((group) =>
+    getSubDirNames(path.join(POSTS_PATH, group)).map((category) => ({ group, category }))
   );
-  const duplicated = cgList.filter((cg, index) => cgList.indexOf(cg) !== index);
-  if (duplicated.length > 0) {
-    throw new Error(`하위 카테고리 폴더명이 중복되었습니다: ${duplicated.join(', ')}`);
-  }
-  return cgList;
-};
 
 export const getCategoryDetailList = async () => {
   const postList = await getPostList();
-  const result: { [key: string]: number } = {};
-  for (const post of postList) {
-    const category = post.categoryPath;
-    if (result[category]) {
-      result[category] += 1;
-    } else {
-      result[category] = 1;
-    }
+  const result = new Map<string, CategoryDetail>();
+  for (const { groupPath, categoryPath, categoryPublicName } of postList) {
+    const url = getCategoryUrl(groupPath, categoryPath);
+    const detail = result.get(url) ?? { groupPath, dirName: categoryPath, publicName: categoryPublicName, url, count: 0 };
+    detail.count += 1;
+    result.set(url, detail);
   }
-  const detailList: CategoryDetail[] = Object.entries(result).map(([category, count]) => ({
-    dirName: category,
-    publicName: getCategoryPublicName(category),
-    count,
-  }));
 
-  return detailList;
+  return Array.from(result.values());
 };
 
 // 상위 카테고리별로 하위 카테고리를 묶어서 조회 (노출할 포스트가 없는 카테고리는 고정 카테고리만 노출)
 export const getCategoryGroupDetailList = async (): Promise<CategoryGroupDetail[]> => {
-  const postList = await getPostList();
   const detailList = await getCategoryDetailList();
   return getCategoryGroupList()
     .map((groupPath) => {
-      const categorySet = new Set(
-        postList.filter((post) => post.groupPath === groupPath).map((post) => post.categoryPath)
-      );
       const children = detailList
-        .filter((detail) => categorySet.has(detail.dirName))
+        .filter((detail) => detail.groupPath === groupPath)
         .sort((a, b) => a.publicName.localeCompare(b.publicName, 'en', { sensitivity: 'base' }));
       const count = children.reduce((sum, detail) => sum + detail.count, 0);
       return {
@@ -233,8 +221,8 @@ export const getSearchablePostList = async (): Promise<SearchablePost[]> => {
 };
 
 // post 상세 페이지 내용 조회
-export const getPostDetail = async (category: string, slug: string) => {
-  const [filePath] = sync(`${POSTS_PATH}/*/${category}/${slug}/content.mdx`);
+export const getPostDetail = async (group: string, category: string, slug: string) => {
+  const [filePath] = sync(`${POSTS_PATH}/${group}/${category}/${slug}/content.mdx`);
   const detail = await parsePost(filePath);
   return detail;
 };

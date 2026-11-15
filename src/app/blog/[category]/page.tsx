@@ -1,44 +1,22 @@
-import { Metadata } from 'next';
+import { notFound, redirect } from 'next/navigation';
 
-import PostListPage from '@/components/post_list/PostListPage';
-import { baseDomain, blogName, blogThumbnailURL } from '@/config/const';
-import { getCategoryList, getCategoryPublicName, getSortedPostList } from '@/lib/post';
+import { getCategoryList, getCategoryUrl } from '@/lib/post';
 
 type Props = {
   params: { category: string };
 };
 
-// 허용된 param 외 접근시 404
 export const dynamicParams = false;
 
 export function generateStaticParams() {
-  const categoryList = getCategoryList();
-  const paramList = categoryList.map((category) => ({ category }));
-  return paramList;
+  return getCategoryList().map(({ category }) => ({ category }));
 }
 
-export async function generateMetadata({ params: { category } }: Props): Promise<Metadata> {
-  const cg = getCategoryPublicName(category);
-  const title = `${cg} | ${blogName}`;
-  const url = `${baseDomain}/${category}`;
-
-  return {
-    title,
-    openGraph: {
-      title,
-      url,
-      images: [blogThumbnailURL],
-    },
-    twitter: {
-      title,
-      images: [blogThumbnailURL],
-    },
-  };
-}
-
-const CategoryPage = async ({ params }: Props) => {
-  const postList = await getSortedPostList(params.category);
-  return <PostListPage postList={postList} category={params.category} />;
+// 예전 주소(/blog/{category})로 들어오면 새 주소로 보낸다
+const LegacyCategoryPage = ({ params }: Props) => {
+  const matched = getCategoryList().find(({ category }) => category === params.category);
+  if (!matched) notFound();
+  redirect(getCategoryUrl(matched.group, matched.category));
 };
 
-export default CategoryPage;
+export default LegacyCategoryPage;

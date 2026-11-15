@@ -33,8 +33,10 @@ export interface SearchablePost {
 }
 
 export interface CategoryDetail {
+  groupPath: string;
   dirName: string;
   publicName: string;
+  url: string;
   count: number;
 }
 
