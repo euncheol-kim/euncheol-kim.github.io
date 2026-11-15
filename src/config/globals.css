@@ -153,3 +153,18 @@
   /* 코드 블록 바로 뒤 문단의 위 여백 */
   margin-top: 1rem;
 }
+
+/* 코드 탭(CodeTabs) 안의 코드 블록은 탭 상자에 붙도록 여백과 모서리를 없앤다 */
+.prose .code-tabs figure[data-rehype-pretty-code-figure] {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+.prose .code-tabs figure[data-rehype-pretty-code-figure] > pre {
+  border-radius: 0;
+}
+.prose p:has(+ .code-tabs) {
+  margin-bottom: 1rem;
+}
+.prose .code-tabs + p {
+  margin-top: 1rem;
+}
