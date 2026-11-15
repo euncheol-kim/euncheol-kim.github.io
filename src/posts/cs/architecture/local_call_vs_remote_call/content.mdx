@@ -1,0 +1,374 @@
+---
+title: "로컬 호출과 원격 호출: 분산 시스템에서 달라지는 것"
+desc: "같은 프로세스 안의 메서드 호출과 네트워크 너머의 원격 호출은 코드 모양이 같아도 성질이 다릅니다. 부분 실패, 지연, 끊어지는 트랜잭션, 일시적인 데이터 불일치가 왜 생기는지, 그리고 요구사항에 따라 어떤 통신 방식을 고르는지를 프레임워크와 무관하게 정리합니다."
+date: 2026-11-15 20:30
+thumbnail: ./thumbnail.webp
+isHot: false
+isVisible: true
+tags: Architecture, Distributed System, MSA, Idempotency, Consistency
+---
+
+### 🌱 포스팅 작성 이유
+
+하나의 프로그램을 여러 서비스로 나누면, 프로그램 안에서 일어나던 메서드 호출이 네트워크를 건너는 호출로 바뀝니다. 호출하는 코드는 거의 그대로인데, 그 호출이 지켜 주던 약속들은 더 이상 지켜지지 않습니다.
+
+로컬 호출과 원격 호출이 무엇이 다른지, 그 차이가 어떤 문제를 만드는지를 정리합니다.
+
+---
+
+## 1. 모양은 같고 성질은 다르다
+
+주문 기능이 회원 상태를 물어봐야 한다고 하겠습니다. "회원 상태를 알려 주는 것"을 인터페이스로 정의하면, 같은 프로세스 안에서 답을 얻는 구현과 네트워크 너머에서 답을 얻는 구현을 모두 만들 수 있습니다.
+
+<CodeTabs>
+
+```java
+interface MemberReader {
+    MemberStatus getStatus(long memberId);
+}
+
+// 로컬 호출 : 같은 프로세스 안의 객체를 부른다
+class LocalMemberReader implements MemberReader {
+    private final MemberService memberService;
+
+    LocalMemberReader(MemberService memberService) {
+        this.memberService = memberService;
+    }
+
+    @Override
+    public MemberStatus getStatus(long memberId) {
+        return memberService.getStatus(memberId);
+    }
+}
+
+// 원격 호출 : 네트워크 너머의 다른 프로세스를 부른다
+class RemoteMemberReader implements MemberReader {
+    private final MemberApiClient client;
+
+    RemoteMemberReader(MemberApiClient client) {
+        this.client = client;
+    }
+
+    @Override
+    public MemberStatus getStatus(long memberId) {
+        return client.get("/members/" + memberId + "/status");   // HTTP 요청
+    }
+}
+```
+
+```kotlin
+interface MemberReader {
+    fun getStatus(memberId: Long): MemberStatus
+}
+
+// 로컬 호출 : 같은 프로세스 안의 객체를 부른다
+class LocalMemberReader(
+    private val memberService: MemberService,
+) : MemberReader {
+    override fun getStatus(memberId: Long): MemberStatus =
+        memberService.getStatus(memberId)
+}
+
+// 원격 호출 : 네트워크 너머의 다른 프로세스를 부른다
+class RemoteMemberReader(
+    private val client: MemberApiClient,
+) : MemberReader {
+    override fun getStatus(memberId: Long): MemberStatus =
+        client.get("/members/$memberId/status")   // HTTP 요청
+}
+```
+
+```python
+from typing import Protocol
+
+
+class MemberReader(Protocol):
+    def get_status(self, member_id: int) -> MemberStatus: ...
+
+
+# 로컬 호출 : 같은 프로세스 안의 객체를 부른다
+class LocalMemberReader:
+    def __init__(self, member_service: MemberService):
+        self._member_service = member_service
+
+    def get_status(self, member_id: int) -> MemberStatus:
+        return self._member_service.get_status(member_id)
+
+
+# 원격 호출 : 네트워크 너머의 다른 프로세스를 부른다
+class RemoteMemberReader:
+    def __init__(self, client: MemberApiClient):
+        self._client = client
+
+    def get_status(self, member_id: int) -> MemberStatus:
+        return self._client.get(f"/members/{member_id}/status")   # HTTP 요청
+```
+
+```javascript
+// 두 클래스 모두 getStatus(memberId)를 가진다
+
+// 로컬 호출 : 같은 프로세스 안의 객체를 부른다
+class LocalMemberReader {
+  #memberService;
+
+  constructor(memberService) {
+    this.#memberService = memberService;
+  }
+
+  getStatus(memberId) {
+    return this.#memberService.getStatus(memberId);
+  }
+}
+
+// 원격 호출 : 네트워크 너머의 다른 프로세스를 부른다
+class RemoteMemberReader {
+  #client;
+
+  constructor(client) {
+    this.#client = client;
+  }
+
+  getStatus(memberId) {
+    return this.#client.get(`/members/${memberId}/status`);   // HTTP 요청
+  }
+}
+```
+
+</CodeTabs>
+
+호출하는 쪽에서 보면 둘은 구별되지 않습니다. 어느 구현이 들어오든 `getStatus`를 부르고 값을 받습니다. 그래서 "나중에 서비스를 분리할 때 구현만 바꿔 끼우면 된다"는 생각이 들기 쉽습니다.
+
+하지만 인터페이스가 같게 만들어 주는 것은 **호출의 모양**뿐입니다. **호출의 성질**은 전혀 다릅니다.
+
+| | 로컬 호출 | 원격 호출 |
+| --- | --- | --- |
+| 실패 | 거의 없다. 부르면 실행된다 | 언제든 실패한다. 상대가 죽어 있을 수도 있다 |
+| 속도 | 나노초 단위 | 밀리초 단위. 때로는 몇 초 |
+| 결과를 모르는 경우 | 없다 | 있다. 응답이 오지 않으면 처리됐는지 알 수 없다 |
+| 트랜잭션 | 하나로 묶을 수 있다 | 서비스마다 따로다 |
+| 데이터 | 항상 최신을 본다 | 잠시 어긋난 상태를 볼 수 있다 |
+
+이 차이를 무시하고 원격 호출을 로컬 호출처럼 다룰 때 하게 되는 잘못된 가정들은 오래전부터 "분산 컴퓨팅의 오류(Fallacies of Distributed Computing)"라는 이름으로 정리되어 있습니다. 그중 이 글과 직접 닿아 있는 것은 다음 세 가지입니다.
+
+| 잘못된 가정 | 실제 |
+| --- | --- |
+| 네트워크는 신뢰할 수 있다 | 요청도 응답도 사라질 수 있다 |
+| 지연 시간은 0이다 | 호출마다 시간이 들고, 그 시간은 들쭉날쭉하다 |
+| 전송 비용은 0이다 | 데이터를 보내려면 변환하고 옮기는 비용이 든다 |
+
+---
+
+## 2. 부분 실패
+
+### 2.1 한쪽만 죽을 수 있다
+
+하나의 프로세스로 돌아가는 프로그램에서는 회원 기능만 죽고 주문 기능만 살아 있는 상황이 없습니다. 함께 살고 함께 죽습니다.
+
+서비스가 나뉘면 **일부만 실패한 상태**가 일상이 됩니다. 주문 서비스는 멀쩡한데 회원 서비스가 응답하지 않는 상황에서 주문을 받을지 거절할지를, 이제는 직접 정해야 합니다. 이것을 부분 실패(Partial Failure)라고 합니다.
+
+### 2.2 응답이 없으면 무슨 일이 있었는지 알 수 없다
+
+더 까다로운 것은 응답이 오지 않는 경우입니다. 호출한 쪽은 다음 세 가지를 구분할 수 없습니다.
+
+| 실제로 일어난 일 | 호출한 쪽이 보는 것 |
+| --- | --- |
+| 요청이 가는 길에 사라졌다 | 타임아웃 |
+| 상대가 처리하다가 죽었다 | 타임아웃 |
+| 상대는 처리를 끝냈는데 응답이 오는 길에 사라졌다 | 타임아웃 |
+
+로컬 호출에서는 "실행됐거나, 예외가 났거나" 둘 중 하나입니다. 원격 호출에는 **"모른다"** 라는 세 번째 결과가 있습니다.
+
+### 2.3 그래서 멱등성이 필요하다
+
+결과를 모를 때 할 수 있는 일은 다시 시도하는 것입니다. 조회라면 문제가 없지만, "포인트 1,000점 차감" 같은 요청은 이미 처리된 뒤에 다시 보내면 두 번 차감됩니다.
+
+같은 요청을 여러 번 받아도 한 번 처리한 것과 결과가 같은 성질을 **멱등성(Idempotency)** 이라고 합니다. 흔한 방법은 요청마다 고유한 ID를 붙이고, 받는 쪽이 이미 처리한 ID를 기억해 두는 것입니다.
+
+<CodeTabs>
+
+```java
+class PointAccount {
+    private final Set<String> processedRequestIds = new HashSet<>();   // 실제로는 DB에 저장한다
+    private long balance = 10_000;
+
+    void use(String requestId, long amount) {
+        if (!processedRequestIds.add(requestId)) {
+            return;   // 이미 처리한 요청이면 아무것도 하지 않는다
+        }
+        balance -= amount;
+    }
+}
+
+PointAccount account = new PointAccount();
+account.use("req-1", 1_000);
+account.use("req-1", 1_000);   // 재시도 : 잔액은 그대로 9,000
+```
+
+```kotlin
+class PointAccount {
+    private val processedRequestIds = mutableSetOf<String>()   // 실제로는 DB에 저장한다
+    private var balance = 10_000L
+
+    fun use(requestId: String, amount: Long) {
+        if (!processedRequestIds.add(requestId)) {
+            return   // 이미 처리한 요청이면 아무것도 하지 않는다
+        }
+        balance -= amount
+    }
+}
+
+val account = PointAccount()
+account.use("req-1", 1_000)
+account.use("req-1", 1_000)   // 재시도 : 잔액은 그대로 9,000
+```
+
+```python
+class PointAccount:
+    def __init__(self):
+        self._processed_request_ids: set[str] = set()   # 실제로는 DB에 저장한다
+        self._balance = 10_000
+
+    def use(self, request_id: str, amount: int) -> None:
+        if request_id in self._processed_request_ids:
+            return   # 이미 처리한 요청이면 아무것도 하지 않는다
+        self._processed_request_ids.add(request_id)
+        self._balance -= amount
+
+
+account = PointAccount()
+account.use("req-1", 1_000)
+account.use("req-1", 1_000)   # 재시도 : 잔액은 그대로 9,000
+```
+
+```javascript
+class PointAccount {
+  #processedRequestIds = new Set();   // 실제로는 DB에 저장한다
+  #balance = 10_000;
+
+  use(requestId, amount) {
+    if (this.#processedRequestIds.has(requestId)) {
+      return;   // 이미 처리한 요청이면 아무것도 하지 않는다
+    }
+    this.#processedRequestIds.add(requestId);
+    this.#balance -= amount;
+  }
+}
+
+const account = new PointAccount();
+account.use('req-1', 1_000);
+account.use('req-1', 1_000);   // 재시도 : 잔액은 그대로 9,000
+```
+
+</CodeTabs>
+
+보내는 쪽은 결과를 모를 때 **같은 ID로** 다시 보내고, 받는 쪽은 그 ID를 보고 중복을 걸러 냅니다. 원격 호출에서 재시도와 멱등성은 항상 짝으로 설계합니다.
+
+---
+
+## 3. 지연
+
+### 3.1 호출 횟수가 곧 시간이다
+
+로컬 호출은 사실상 비용이 없어서, 반복문 안에서 수백 번 불러도 문제가 되지 않습니다. 같은 구조가 원격 호출이 되면 사정이 달라집니다.
+
+| | 로컬 호출 | 원격 호출 (1회 10ms 가정) |
+| --- | --- | --- |
+| 1번 | 무시할 수 있다 | 10ms |
+| 100번 | 무시할 수 있다 | 1초 |
+| 10,000번 | 여전히 빠르다 | 100초 |
+
+그래서 원격 호출에서는 한 건씩 여러 번 묻는 대신 **여러 건을 한 번에 묻는** 형태로 인터페이스를 설계합니다. "회원 한 명의 상태"가 아니라 "회원 여러 명의 상태"를 받는 식입니다.
+
+### 3.2 느려지는 것은 번진다
+
+상대가 죽으면 오히려 빨리 실패합니다. 더 위험한 것은 **느려지는** 경우입니다. 회원 서비스가 응답에 30초씩 걸리기 시작하면, 응답을 기다리는 주문 서비스의 작업들이 쌓이고, 결국 주문 서비스도 새 요청을 받지 못하게 됩니다. 주문 서비스를 부르던 다른 서비스도 같은 일을 겪습니다.
+
+한 서비스의 문제가 호출하는 쪽으로 차례차례 번지는 것을 **연쇄 장애(Cascading Failure)** 라고 합니다. 이를 막는 기본 장치는 두 가지입니다.
+
+| 장치 | 하는 일 |
+| --- | --- |
+| 타임아웃(Timeout) | 정해진 시간 안에 응답이 없으면 기다리기를 포기한다 |
+| 서킷 브레이커(Circuit Breaker) | 계속 실패하는 상대에게는 한동안 호출을 보내지 않고 즉시 실패로 처리한다 |
+
+둘 다 "오래 기다리느니 빨리 실패한다"는 같은 생각에서 나온 것입니다. 빨리 실패해야 내 자원을 지킬 수 있고, 상대에게도 회복할 틈이 생깁니다.
+
+---
+
+## 4. 끊어지는 트랜잭션
+
+### 4.1 한 데이터베이스 안에서는 함께 성공하거나 함께 취소된다
+
+주문을 저장하면서 포인트를 차감한다고 하겠습니다. 둘이 같은 데이터베이스에 있으면 트랜잭션 하나로 묶을 수 있고, 데이터베이스가 "둘 다 반영되거나, 둘 다 반영되지 않는다"를 보장합니다. 이 성질을 원자성(Atomicity)이라고 합니다.
+
+### 4.2 서비스가 나뉘면 이 보장이 사라진다
+
+포인트가 다른 서비스로 분리되면, 포인트 차감은 그 서비스가 자기 데이터베이스에 자기 트랜잭션으로 커밋합니다. 내 트랜잭션은 내 데이터베이스까지만 책임집니다.
+
+| 순서 | 일어난 일 | 결과 |
+| --- | --- | --- |
+| 1 | 포인트 서비스에 차감 요청 | 성공. 포인트 서비스의 DB에 이미 커밋됨 |
+| 2 | 주문 저장 | 실패. 주문 서비스의 DB는 롤백됨 |
+| 3 | - | **포인트만 차감되고 주문은 없다** |
+
+순서를 바꿔 주문을 먼저 저장해도 마찬가지입니다. 이번에는 주문만 있고 포인트는 차감되지 않은 상태가 생길 수 있습니다.
+
+### 4.3 대안들
+
+| 방법 | 내용 | 한계 |
+| --- | --- | --- |
+| 2단계 커밋(2PC) | 조정자가 모든 참여자에게 "커밋할 준비가 됐는가"를 묻고, 모두 준비되면 커밋시킨다 | 참여자 하나가 느리거나 죽으면 전체가 멈춘다. 서비스 간에는 잘 쓰지 않는다 |
+| 사가(Saga) | 각 서비스가 자기 트랜잭션을 차례로 커밋하고, 중간에 실패하면 앞 단계를 되돌리는 **보상 트랜잭션**을 실행한다 | 되돌리는 동안 중간 상태가 밖에 보인다. 보상 로직을 직접 만들어야 한다 |
+
+사가에서 "되돌린다"는 데이터베이스의 롤백과 다릅니다. 이미 커밋된 포인트 차감을 없던 일로 만들 수는 없으므로, "포인트를 다시 적립한다"는 새로운 작업을 실행하는 것입니다.
+
+---
+
+## 5. 일시적인 데이터 불일치
+
+서비스마다 데이터를 따로 가지면, 한쪽의 변경이 다른 쪽에 반영되기까지 시간이 걸립니다. 회원이 탈퇴한 직후 몇 초 동안은 주문 서비스가 그 회원을 아직 정상 회원으로 알고 있을 수 있습니다.
+
+| | 강한 일관성(Strong Consistency) | 최종 일관성(Eventual Consistency) |
+| --- | --- | --- |
+| 의미 | 변경 직후부터 모두가 같은 값을 본다 | 잠시 어긋날 수 있지만, 결국에는 같은 값이 된다 |
+| 가능한 곳 | 하나의 데이터베이스, 하나의 트랜잭션 | 서비스 사이 |
+| 비용 | 묶인 대상이 함께 느려지고 함께 실패한다 | 어긋난 동안의 처리를 직접 정해야 한다 |
+
+최종 일관성은 "언젠가는 맞겠지"라고 내버려 둔다는 뜻이 아닙니다. 어긋난 동안 일어난 일을 어떻게 처리할지를 **업무 규칙으로** 정해 두어야 합니다. 탈퇴 직후에 들어온 주문을 취소할지, 그대로 둘지 같은 것들입니다. 이 결정은 기술이 대신 내려 주지 않습니다.
+
+---
+
+## 6. 요구사항에 따라 통신 방식을 고른다
+
+원격 호출의 성질을 알고 나면, 모든 호출을 같은 방식으로 처리할 수 없다는 것이 보입니다. 그 호출이 **어떤 요구사항을 위한 것인지**에 따라 방식이 달라집니다.
+
+| 요구사항 | 어울리는 방식 | 이유 |
+| --- | --- | --- |
+| 지금 이 순간의 값이 필요하다 | 동기 호출 (HTTP, gRPC) | 응답을 받아야 다음으로 넘어갈 수 있다 |
+| 알려 주기만 하면 된다 | 비동기 이벤트 | 상대의 응답을 기다릴 이유가 없고, 상대의 장애가 나에게 번지지 않는다 |
+| 자주 조회하고 약간의 오차는 괜찮다 | 캐시 또는 로컬 조회 모델(복사본) | 매번 원격 호출을 하지 않아도 된다 |
+| 반드시 함께 바뀌어야 한다 | 경계를 다시 검토한다 | 강한 일관성이 필요한 데이터는 한 서비스가 함께 소유하는 편이 자연스럽다 |
+
+마지막 줄이 특히 중요합니다. "이 두 데이터는 단 한순간도 어긋나면 안 된다"는 요구가 서비스 경계를 넘나든다면, 통신 방식을 고민하기 전에 **둘을 나눈 것이 맞는지**부터 다시 봐야 합니다. 나눈 뒤 분산 트랜잭션으로 억지로 묶는 것보다, 경계를 다시 긋는 쪽이 대개 더 단순합니다.
+
+비동기 이벤트로 알리는 방식은 [이벤트 기반 아키텍처: 호출 대신 사실을 알린다](/blog/groups/cs/architecture/event_driven_architecture)에서, 데이터를 누가 소유하는지는 [MSA를 지향한다면: 데이터베이스 소유권 설계](/blog/groups/cs/architecture/msa_database_ownership)에서 다뤘습니다.
+
+---
+
+## 7. 마무리
+
+로컬 호출과 원격 호출은 코드 모양이 같아도 다른 것입니다. 인터페이스로 모양을 맞춰 두면 고칠 코드의 범위는 줄일 수 있지만, 네트워크가 끼어들면서 생기는 문제는 그대로 남습니다.
+
+- 원격 호출에는 성공과 실패 외에 **"모른다"** 가 있다. 그래서 재시도와 멱등성을 함께 설계한다
+- 느려지는 것은 번진다. 타임아웃과 서킷 브레이커로 빨리 실패한다
+- 트랜잭션은 서비스 경계를 넘지 못한다. 보상 트랜잭션으로 맞추거나, 경계를 다시 본다
+- 서비스 사이의 데이터는 잠시 어긋난다. 그동안의 처리는 업무 규칙으로 정한다
+
+---
+
+#### 📕 Reference
+
+- Martin Kleppmann, 『Designing Data-Intensive Applications』, Chapter 8 "The Trouble with Distributed Systems", Chapter 9 "Consistency and Consensus"
+- Sam Newman, 『Building Microservices』 2nd Edition, Chapter 4 "Microservice Communication Styles", Chapter 6 "Workflow"
+- Michael T. Nygard, 『Release It!』 2nd Edition, Chapter 5 "Stability Patterns" (Timeouts, Circuit Breaker)
+- Martin Fowler, [Microservices and the First Law of Distributed Objects](https://martinfowler.com/articles/distributed-objects-microservices.html)
+- L. Peter Deutsch, Fallacies of Distributed Computing (분산 컴퓨팅의 오류)

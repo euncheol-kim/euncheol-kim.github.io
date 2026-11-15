@@ -1,0 +1,435 @@
+---
+title: "이벤트 기반 아키텍처(Event-Driven Architecture): 호출 대신 사실을 알린다"
+desc: "이벤트 기반 아키텍처는 구성 요소가 서로를 직접 호출하는 대신, 일어난 사실을 이벤트로 알리고 필요한 쪽이 받아 처리하는 구조입니다. 명령과 이벤트의 차이, 발행과 구독, 전달 보장 수준, 이벤트 유실을 막는 Outbox와 중복을 견디는 멱등 소비자를 프레임워크와 무관하게 정리합니다."
+date: 2026-11-15 20:35
+thumbnail: ./thumbnail.webp
+isHot: false
+isVisible: true
+tags: Architecture, Event Driven, Publish Subscribe, Outbox Pattern, Idempotency
+---
+
+### 🌱 포스팅 작성 이유
+
+기능이 늘어날수록 "A가 끝나면 B도 하고, C도 하고, D도 해야 한다"는 요구가 쌓입니다. 이것을 A가 B, C, D를 차례로 호출하는 식으로 풀면, A는 자신과 상관없는 것들을 점점 많이 알게 됩니다.
+
+이벤트 기반 아키텍처는 이 관계를 뒤집습니다. 무엇이 달라지는지, 그 대가로 무엇을 챙겨야 하는지를 정리합니다.
+
+---
+
+## 1. 명령과 이벤트
+
+구성 요소가 서로 주고받는 메시지는 크게 두 종류입니다.
+
+| | 명령(Command) | 이벤트(Event) |
+| --- | --- | --- |
+| 의미 | "이것을 해라" | "이런 일이 일어났다" |
+| 시제 | 앞으로 할 일 | 이미 일어난 사실 |
+| 이름 | `CancelOrders` (주문을 취소하라) | `MemberWithdrawn` (회원이 탈퇴했다) |
+| 받는 쪽 | 정해진 하나 | 관심 있는 누구나. 없을 수도, 여럿일 수도 있다 |
+| 보내는 쪽이 아는 것 | 누가 무엇을 해야 하는지 | 자신에게 일어난 일뿐 |
+| 거절 | 받는 쪽이 거절할 수 있다 | 거절할 수 없다. 이미 일어났다 |
+
+이벤트 기반 아키텍처(Event-Driven Architecture, EDA)는 구성 요소들이 명령으로 서로를 부르는 대신, **이벤트를 발행하고 구독하는 방식으로 연결되는 구조**입니다.
+
+---
+
+## 2. 직접 호출에서 이벤트로
+
+회원이 탈퇴하면 주문 쪽과 쿠폰 쪽에서 각각 처리할 일이 있다고 하겠습니다.
+
+### 2.1 직접 호출
+
+<CodeTabs>
+
+```java
+class MemberService {
+    private final OrderService orderService;
+    private final CouponService couponService;
+
+    MemberService(OrderService orderService, CouponService couponService) {
+        this.orderService = orderService;
+        this.couponService = couponService;
+    }
+
+    void withdraw(long memberId) {
+        // ... 탈퇴 처리
+        orderService.onMemberWithdrawn(memberId);
+        couponService.onMemberWithdrawn(memberId);
+    }
+}
+```
+
+```kotlin
+class MemberService(
+    private val orderService: OrderService,
+    private val couponService: CouponService,
+) {
+    fun withdraw(memberId: Long) {
+        // ... 탈퇴 처리
+        orderService.onMemberWithdrawn(memberId)
+        couponService.onMemberWithdrawn(memberId)
+    }
+}
+```
+
+```python
+class MemberService:
+    def __init__(self, order_service: OrderService, coupon_service: CouponService):
+        self._order_service = order_service
+        self._coupon_service = coupon_service
+
+    def withdraw(self, member_id: int) -> None:
+        # ... 탈퇴 처리
+        self._order_service.on_member_withdrawn(member_id)
+        self._coupon_service.on_member_withdrawn(member_id)
+```
+
+```javascript
+class MemberService {
+  #orderService;
+  #couponService;
+
+  constructor(orderService, couponService) {
+    this.#orderService = orderService;
+    this.#couponService = couponService;
+  }
+
+  withdraw(memberId) {
+    // ... 탈퇴 처리
+    this.#orderService.onMemberWithdrawn(memberId);
+    this.#couponService.onMemberWithdrawn(memberId);
+  }
+}
+```
+
+</CodeTabs>
+
+| 문제 | 내용 |
+| --- | --- |
+| 회원이 남의 일을 안다 | 탈퇴는 회원의 일인데, 주문과 쿠폰의 존재와 메서드 이름까지 알아야 한다 |
+| 반응하는 곳이 늘 때마다 회원을 고친다 | 리뷰, 알림이 추가되면 `withdraw`에 호출이 계속 붙는다 |
+| 남의 실패가 내 실패가 된다 | 쿠폰 처리에서 예외가 나면 탈퇴 자체가 실패한다 |
+
+### 2.2 이벤트 발행과 구독
+
+회원은 "회원이 탈퇴했다"는 사실만 알리고, 그 소식이 필요한 쪽이 각자 받아 처리하게 합니다. 사실을 알리는 쪽을 **발행자(Publisher)**, 받아 처리하는 쪽을 **구독자(Subscriber)**, 그 사이에서 이벤트를 전달하는 것을 이벤트 버스 또는 브로커라고 합니다.
+
+원리를 보기 위해 가장 단순한 이벤트 버스를 직접 만들어 보겠습니다.
+
+<CodeTabs>
+
+```java
+record MemberWithdrawn(long memberId) {}
+
+class EventBus {
+    private final List<Consumer<MemberWithdrawn>> subscribers = new ArrayList<>();
+
+    void subscribe(Consumer<MemberWithdrawn> subscriber) {
+        subscribers.add(subscriber);
+    }
+
+    void publish(MemberWithdrawn event) {
+        subscribers.forEach(subscriber -> subscriber.accept(event));
+    }
+}
+
+class MemberService {
+    private final EventBus eventBus;
+
+    MemberService(EventBus eventBus) {
+        this.eventBus = eventBus;
+    }
+
+    void withdraw(long memberId) {
+        // ... 탈퇴 처리
+        eventBus.publish(new MemberWithdrawn(memberId));   // 사실만 알린다
+    }
+}
+
+// 관심 있는 쪽이 각자 구독한다
+eventBus.subscribe(event -> orderService.onMemberWithdrawn(event.memberId()));
+eventBus.subscribe(event -> couponService.onMemberWithdrawn(event.memberId()));
+```
+
+```kotlin
+data class MemberWithdrawn(val memberId: Long)
+
+class EventBus {
+    private val subscribers = mutableListOf<(MemberWithdrawn) -> Unit>()
+
+    fun subscribe(subscriber: (MemberWithdrawn) -> Unit) {
+        subscribers.add(subscriber)
+    }
+
+    fun publish(event: MemberWithdrawn) {
+        subscribers.forEach { subscriber -> subscriber(event) }
+    }
+}
+
+class MemberService(
+    private val eventBus: EventBus,
+) {
+    fun withdraw(memberId: Long) {
+        // ... 탈퇴 처리
+        eventBus.publish(MemberWithdrawn(memberId))   // 사실만 알린다
+    }
+}
+
+// 관심 있는 쪽이 각자 구독한다
+eventBus.subscribe { event -> orderService.onMemberWithdrawn(event.memberId) }
+eventBus.subscribe { event -> couponService.onMemberWithdrawn(event.memberId) }
+```
+
+```python
+from dataclasses import dataclass
+from typing import Callable
+
+
+@dataclass(frozen=True)
+class MemberWithdrawn:
+    member_id: int
+
+
+class EventBus:
+    def __init__(self):
+        self._subscribers: list[Callable[[MemberWithdrawn], None]] = []
+
+    def subscribe(self, subscriber: Callable[[MemberWithdrawn], None]) -> None:
+        self._subscribers.append(subscriber)
+
+    def publish(self, event: MemberWithdrawn) -> None:
+        for subscriber in self._subscribers:
+            subscriber(event)
+
+
+class MemberService:
+    def __init__(self, event_bus: EventBus):
+        self._event_bus = event_bus
+
+    def withdraw(self, member_id: int) -> None:
+        # ... 탈퇴 처리
+        self._event_bus.publish(MemberWithdrawn(member_id))   # 사실만 알린다
+
+
+# 관심 있는 쪽이 각자 구독한다
+event_bus.subscribe(lambda event: order_service.on_member_withdrawn(event.member_id))
+event_bus.subscribe(lambda event: coupon_service.on_member_withdrawn(event.member_id))
+```
+
+```javascript
+class EventBus {
+  #subscribers = [];
+
+  subscribe(subscriber) {
+    this.#subscribers.push(subscriber);
+  }
+
+  publish(event) {
+    this.#subscribers.forEach((subscriber) => subscriber(event));
+  }
+}
+
+class MemberService {
+  #eventBus;
+
+  constructor(eventBus) {
+    this.#eventBus = eventBus;
+  }
+
+  withdraw(memberId) {
+    // ... 탈퇴 처리
+    this.#eventBus.publish({ type: 'MemberWithdrawn', memberId });   // 사실만 알린다
+  }
+}
+
+// 관심 있는 쪽이 각자 구독한다
+eventBus.subscribe((event) => orderService.onMemberWithdrawn(event.memberId));
+eventBus.subscribe((event) => couponService.onMemberWithdrawn(event.memberId));
+```
+
+</CodeTabs>
+
+`MemberService`에서 주문과 쿠폰이 사라졌습니다. 회원은 누가 이 이벤트를 듣는지 모릅니다. 듣는 쪽이 하나든 다섯이든 회원의 코드는 그대로입니다.
+
+| | 직접 호출 | 이벤트 |
+| --- | --- | --- |
+| 회원이 아는 것 | 주문과 쿠폰의 메서드 | 자신이 발행하는 이벤트뿐 |
+| 반응하는 곳이 늘어나면 | 회원 코드를 고친다 | 구독만 추가한다 |
+| 의존 방향 | 회원 → 주문, 쿠폰 | 주문, 쿠폰 → 회원의 이벤트 |
+
+핵심은 **의존 방향이 뒤집힌다**는 것입니다. 전에는 탈퇴하는 쪽이 후속 처리를 알아야 했고, 이제는 후속 처리가 필요한 쪽이 탈퇴 이벤트를 알면 됩니다.
+
+### 2.3 같은 프로세스에서 다른 프로세스로
+
+위의 이벤트 버스는 같은 프로세스 안에서 구독자를 차례로 호출할 뿐입니다. 그래도 구조는 이미 이벤트 기반입니다. 이벤트를 전달하는 통로만 바꾸면 범위가 넓어집니다.
+
+| 통로 | 범위 | 특징 |
+| --- | --- | --- |
+| 프로세스 내 이벤트 버스 | 한 프로그램 안 | 단순하다. 프로그램이 죽으면 전달 중이던 이벤트도 사라진다 |
+| 메시지 브로커 (Kafka, RabbitMQ 등) | 여러 서비스 사이 | 이벤트를 보관해 두므로 구독자가 잠시 죽어 있어도 나중에 받는다 |
+
+발행하는 코드와 구독하는 코드가 이미 분리되어 있다면, 통로를 프로세스 내부에서 브로커로 옮기는 것은 비교적 작은 변화입니다.
+
+---
+
+## 3. 이벤트에 무엇을 담을 것인가
+
+### 3.1 알림만 할 것인가, 상태까지 실을 것인가
+
+| 방식 | 이벤트의 내용 | 구독자가 하는 일 | 특징 |
+| --- | --- | --- | --- |
+| 알림형 (Event Notification) | "회원 42번이 탈퇴했다" | 더 필요한 정보는 발행자에게 다시 물어본다 | 이벤트가 작다. 대신 발행자를 다시 호출하게 된다 |
+| 상태 전달형 (Event-Carried State Transfer) | 탈퇴 시각, 사유 등 필요한 값까지 포함 | 이벤트만으로 처리한다 | 발행자를 다시 부를 필요가 없다. 대신 이벤트가 커지고 형식을 바꾸기 어려워진다 |
+
+### 3.2 내부용 이벤트와 외부용 이벤트
+
+| | 도메인 이벤트(Domain Event) | 통합 이벤트(Integration Event) |
+| --- | --- | --- |
+| 의미 | 한 영역 **내부**에서 일어난 비즈니스 사실 | **다른 영역이나 서비스에 전달**하려고 정의한 계약 |
+| 바꾸기 | 자유롭다. 내부 구현의 일부다 | 조심해야 한다. 바꾸면 듣는 쪽이 깨진다 |
+| 담는 내용 | 내부 모델을 그대로 써도 된다 | 공개해도 되는 최소한의 값 |
+
+밖으로 나가는 이벤트는 공개 API의 응답 형식과 같습니다. 한번 공개하면 누가 어떻게 쓰고 있는지 알 수 없으므로 함부로 바꿀 수 없습니다. 내부용 이벤트를 그대로 밖으로 내보내면, 내부 구조를 고칠 때마다 모든 구독자가 영향을 받습니다.
+
+---
+
+## 4. 이벤트는 얼마나 확실하게 전달되는가
+
+이벤트로 연결하면 "보냈는데 못 받았다", "한 번 보냈는데 두 번 받았다"는 문제를 다뤄야 합니다.
+
+### 4.1 전달 보장의 세 수준
+
+| 수준 | 의미 | 생길 수 있는 일 |
+| --- | --- | --- |
+| 최대 한 번 (At-most-once) | 한 번만 보내고 재시도하지 않는다 | 유실될 수 있다. 중복은 없다 |
+| 최소 한 번 (At-least-once) | 받았다는 확인이 올 때까지 다시 보낸다 | 유실은 없다. 중복될 수 있다 |
+| 정확히 한 번 (Exactly-once) | 유실도 중복도 없다 | 네트워크 너머에서 전달만으로 보장하기는 매우 어렵다 |
+
+네트워크에서는 "보냈는데 확인 응답이 안 온" 상황에서 상대가 받았는지 알 수 없습니다. 다시 보내면 중복될 수 있고, 안 보내면 유실될 수 있습니다. 그래서 실무에서는 대개 **최소 한 번 전달 + 중복을 견디는 구독자** 조합으로 "결과적으로 한 번 처리된 것과 같은" 상태를 만듭니다.
+
+### 4.2 발행 쪽: 저장과 발행은 한 몸이 아니다
+
+회원 탈퇴는 "데이터베이스에 탈퇴를 기록하는 일"과 "이벤트를 발행하는 일" 두 가지입니다. 데이터베이스와 브로커는 서로 다른 시스템이므로 이 둘은 트랜잭션 하나로 묶이지 않습니다. 이것을 이중 쓰기(Dual Write) 문제라고 합니다.
+
+| 순서 | 중간에 실패하면 |
+| --- | --- |
+| 이벤트를 먼저 발행하고 저장한다 | 저장이 실패하면 **일어나지 않은 탈퇴가 퍼진다** |
+| 저장한 뒤 이벤트를 발행한다 | 발행 직전에 프로그램이 죽으면 **탈퇴는 됐는데 아무도 모른다** |
+
+대표적인 해결 방법이 **Transactional Outbox Pattern**입니다. 이벤트를 곧바로 내보내지 않고, 먼저 같은 데이터베이스의 테이블(Outbox)에 저장합니다.
+
+```text
+① 하나의 트랜잭션
+   ├─ members 테이블 : 탈퇴 처리
+   └─ outbox 테이블  : MemberWithdrawn 이벤트 저장
+
+② 별도의 전달 프로세스
+   └─ outbox 테이블에서 아직 보내지 않은 이벤트를 읽어 브로커에 발행
+      └─ 발행에 성공하면 "보냄"으로 표시
+```
+
+탈퇴와 이벤트 저장이 같은 트랜잭션이므로 둘 다 저장되거나 둘 다 취소됩니다. 발행에 실패해도 이벤트는 테이블에 남아 있어 다시 시도할 수 있습니다.
+
+전달 프로세스가 브로커에 발행한 직후, "보냄"으로 표시하기 전에 죽으면 같은 이벤트를 다시 보내게 됩니다. Outbox가 보장하는 것은 **최소 한 번** 전달입니다.
+
+### 4.3 구독 쪽: 멱등 소비자
+
+이벤트가 중복될 수 있으므로, 구독자는 같은 이벤트를 두 번 받아도 결과가 달라지지 않아야 합니다. 이런 구독자를 **멱등 소비자(Idempotent Consumer)** 라고 합니다. 이벤트마다 고유한 ID를 붙이고, 처리한 ID를 기억해 두는 방법이 일반적입니다.
+
+<CodeTabs>
+
+```java
+class OrderEventHandler {
+    private final Set<String> handledEventIds = new HashSet<>();   // 실제로는 DB에 저장한다
+
+    void handle(String eventId, long memberId) {
+        if (!handledEventIds.add(eventId)) {
+            return;   // 이미 처리한 이벤트는 건너뛴다
+        }
+        // ... 탈퇴한 회원의 주문에 대한 후속 처리
+    }
+}
+```
+
+```kotlin
+class OrderEventHandler {
+    private val handledEventIds = mutableSetOf<String>()   // 실제로는 DB에 저장한다
+
+    fun handle(eventId: String, memberId: Long) {
+        if (!handledEventIds.add(eventId)) {
+            return   // 이미 처리한 이벤트는 건너뛴다
+        }
+        // ... 탈퇴한 회원의 주문에 대한 후속 처리
+    }
+}
+```
+
+```python
+class OrderEventHandler:
+    def __init__(self):
+        self._handled_event_ids: set[str] = set()   # 실제로는 DB에 저장한다
+
+    def handle(self, event_id: str, member_id: int) -> None:
+        if event_id in self._handled_event_ids:
+            return   # 이미 처리한 이벤트는 건너뛴다
+        self._handled_event_ids.add(event_id)
+        # ... 탈퇴한 회원의 주문에 대한 후속 처리
+```
+
+```javascript
+class OrderEventHandler {
+  #handledEventIds = new Set();   // 실제로는 DB에 저장한다
+
+  handle(eventId, memberId) {
+    if (this.#handledEventIds.has(eventId)) {
+      return;   // 이미 처리한 이벤트는 건너뛴다
+    }
+    this.#handledEventIds.add(eventId);
+    // ... 탈퇴한 회원의 주문에 대한 후속 처리
+  }
+}
+```
+
+</CodeTabs>
+
+실제로는 "처리한 ID를 기록하는 일"과 "후속 처리"를 같은 트랜잭션으로 묶어야 합니다. 그래야 후속 처리 도중 실패했을 때 ID만 기록되어 이벤트를 영영 건너뛰는 일이 없습니다.
+
+### 4.4 순서
+
+이벤트는 발행한 순서대로 도착한다는 보장이 없습니다. "회원 정보 변경"이 "회원 가입"보다 먼저 도착할 수도 있습니다. 순서가 중요하다면 같은 대상(같은 회원)의 이벤트가 같은 경로로 차례대로 흐르게 하거나, 이벤트에 버전 번호를 실어 오래된 이벤트를 무시하는 식으로 대비합니다.
+
+---
+
+## 5. 얻는 것과 치르는 것
+
+| 구분 | 내용 |
+| --- | --- |
+| 얻는 것 | 발행자가 구독자를 몰라도 된다. 기능을 추가할 때 기존 코드를 고치지 않는다 |
+| 얻는 것 | 구독자의 장애나 지연이 발행자에게 번지지 않는다 |
+| 얻는 것 | 구독자가 잠시 죽어 있어도, 살아난 뒤 밀린 이벤트를 처리할 수 있다 |
+| 치르는 것 | 결과가 즉시 반영되지 않는다. 잠시 어긋난 상태(최종 일관성)를 받아들여야 한다 |
+| 치르는 것 | 흐름이 코드에 드러나지 않는다. "탈퇴하면 무슨 일이 일어나는가"를 알려면 구독자를 모두 찾아봐야 한다 |
+| 치르는 것 | 유실, 중복, 순서를 직접 다뤄야 한다 |
+
+그래서 모든 것을 이벤트로 바꾸는 것이 답은 아닙니다. 주문하는 순간 회원 상태를 확인해야 하는 경우처럼 **지금 답이 필요한 일**에는 직접 호출이 맞습니다. 이벤트는 **결과를 기다릴 필요가 없는 일**에 어울립니다. 두 방식의 차이는 [로컬 호출과 원격 호출: 분산 시스템에서 달라지는 것](/blog/groups/cs/architecture/local_call_vs_remote_call)에서 다뤘습니다.
+
+---
+
+## 6. 마무리
+
+이벤트 기반 아키텍처는 **"누가 누구를 호출하는가"를 "누가 무슨 사실을 알리는가"로 바꾸는 구조**입니다.
+
+- 명령은 "해라", 이벤트는 "일어났다"이다. 이벤트를 발행하는 쪽은 듣는 쪽을 몰라도 된다
+- 의존 방향이 뒤집혀, 기능을 추가할 때 발행자를 고치지 않아도 된다
+- 내부용 이벤트와 외부에 공개하는 이벤트를 구분한다. 밖으로 나간 이벤트는 바꾸기 어려운 계약이다
+- 전달은 대개 "최소 한 번"이다. 발행 쪽은 Outbox로 유실을 막고, 구독 쪽은 멱등하게 만들어 중복을 견딘다
+
+---
+
+#### 📕 Reference
+
+- Martin Fowler, [What do you mean by "Event-Driven"?](https://martinfowler.com/articles/201701-event-driven.html)
+- Gregor Hohpe, Bobby Woolf, 『Enterprise Integration Patterns』, Publish-Subscribe Channel, Idempotent Receiver, Guaranteed Delivery
+- Martin Kleppmann, 『Designing Data-Intensive Applications』, Chapter 11 "Stream Processing"
+- Chris Richardson, microservices.io, [Pattern: Transactional outbox](https://microservices.io/patterns/data/transactional-outbox.html), [Pattern: Idempotent Consumer](https://microservices.io/patterns/communication-style/idempotent-consumer.html)
+- Vaughn Vernon, 『Implementing Domain-Driven Design』, Chapter 8 "Domain Events"

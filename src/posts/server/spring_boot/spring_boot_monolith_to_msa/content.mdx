@@ -1,0 +1,339 @@
+---
+title: "모놀리스에서 MSA로: 구현체 교체로 끝나지 않는 이유"
+desc: "모듈 간 호출을 인터페이스 뒤에 숨겨 두면 MSA로 전환할 때 구현체만 바꾸면 될 것처럼 보입니다. 하지만 메서드 호출이 네트워크 호출로 바뀌면 장애, 지연, 데이터 불일치, 분산 트랜잭션이라는 새로운 문제가 생깁니다. 무엇이 달라지는지, 요구사항에 따라 어떤 통신 방식을 골라야 하는지 정리합니다."
+date: 2026-11-15 20:02
+thumbnail: ./thumbnail.webp
+isHot: false
+isVisible: true
+tags: Spring Boot, MSA, Monolith, Distributed System
+---
+
+### 🌱 포스팅 작성 이유
+
+멀티 모듈로 모놀리스를 구성하면서 "모듈끼리는 인터페이스로만 대화하게 해 두면, 나중에 MSA로 갈 때 구현체만 갈아 끼우면 된다"는 설명을 자주 접했습니다. 절반은 맞는 말입니다. 코드를 고칠 범위는 확실히 줄어듭니다.
+
+하지만 인터페이스가 그대로라고 해서 전환이 구현체 교체만으로 끝나지는 않습니다. 어떤 문제가 새로 생기는지, 그래서 무엇을 판단해야 하는지를 Spring Boot 코드로 정리합니다. 프레임워크와 무관한 개념 설명은 [로컬 호출과 원격 호출: 분산 시스템에서 달라지는 것](/blog/groups/cs/architecture/local_call_vs_remote_call)에 따로 정리했습니다.
+
+---
+
+## 1. 출발점: 인터페이스 뒤에 숨긴 모듈 호출
+
+주문(`order`) 모듈이 주문을 만들 때 회원(`member`) 모듈에 회원 상태를 물어봐야 한다고 하겠습니다. 주문 모듈은 회원 모듈의 클래스를 직접 부르지 않고, 자신이 필요한 것을 인터페이스로 정의합니다.
+
+<CodeTabs>
+
+```java
+// order 모듈 : "회원 상태를 알려 주는 무언가"가 필요하다
+public interface MemberReader {
+    MemberStatus getStatus(Long memberId);
+}
+
+public class OrderService {
+    private final MemberReader memberReader;
+    private final OrderRepository orderRepository;
+
+    public OrderService(MemberReader memberReader, OrderRepository orderRepository) {
+        this.memberReader = memberReader;
+        this.orderRepository = orderRepository;
+    }
+
+    public Order placeOrder(Long memberId, List<OrderItem> items) {
+        if (memberReader.getStatus(memberId) != MemberStatus.ACTIVE) {
+            throw new IllegalStateException("주문할 수 없는 회원입니다.");
+        }
+        return orderRepository.save(Order.create(memberId, items));
+    }
+}
+```
+
+```kotlin
+// order 모듈 : "회원 상태를 알려 주는 무언가"가 필요하다
+interface MemberReader {
+    fun getStatus(memberId: Long): MemberStatus
+}
+
+class OrderService(
+    private val memberReader: MemberReader,
+    private val orderRepository: OrderRepository,
+) {
+    fun placeOrder(memberId: Long, items: List<OrderItem>): Order {
+        check(memberReader.getStatus(memberId) == MemberStatus.ACTIVE) { "주문할 수 없는 회원입니다." }
+        return orderRepository.save(Order.create(memberId, items))
+    }
+}
+```
+
+</CodeTabs>
+
+모놀리스에서는 이 인터페이스의 구현체가 회원 모듈의 메서드를 그대로 호출합니다.
+
+<CodeTabs>
+
+```java
+// 모놀리스 : 같은 프로세스 안에서 메서드를 호출한다
+@Component
+public class InProcessMemberReader implements MemberReader {
+    private final MemberService memberService;
+
+    public InProcessMemberReader(MemberService memberService) {
+        this.memberService = memberService;
+    }
+
+    @Override
+    public MemberStatus getStatus(Long memberId) {
+        return memberService.getStatus(memberId);
+    }
+}
+```
+
+```kotlin
+// 모놀리스 : 같은 프로세스 안에서 메서드를 호출한다
+@Component
+class InProcessMemberReader(
+    private val memberService: MemberService,
+) : MemberReader {
+    override fun getStatus(memberId: Long): MemberStatus =
+        memberService.getStatus(memberId)
+}
+```
+
+</CodeTabs>
+
+회원이 별도 서비스로 분리되면 구현체를 HTTP 호출로 바꿉니다.
+
+<CodeTabs>
+
+```java
+// MSA : 네트워크 너머의 회원 서비스를 호출한다
+@Component
+public class HttpMemberReader implements MemberReader {
+    private final RestClient restClient;
+
+    public HttpMemberReader(RestClient restClient) {
+        this.restClient = restClient;
+    }
+
+    @Override
+    public MemberStatus getStatus(Long memberId) {
+        return restClient.get()
+                .uri("/members/{id}/status", memberId)
+                .retrieve()
+                .body(MemberStatus.class);
+    }
+}
+```
+
+```kotlin
+// MSA : 네트워크 너머의 회원 서비스를 호출한다
+@Component
+class HttpMemberReader(
+    private val restClient: RestClient,
+) : MemberReader {
+    override fun getStatus(memberId: Long): MemberStatus =
+        restClient.get()
+            .uri("/members/{id}/status", memberId)
+            .retrieve()
+            .body(MemberStatus::class.java)!!
+}
+```
+
+</CodeTabs>
+
+`OrderService`는 한 줄도 바뀌지 않았습니다. 여기까지만 보면 전환은 구현체 교체로 끝난 것처럼 보입니다.
+
+---
+
+## 2. 메서드 호출과 네트워크 호출은 다르다
+
+문제는 `MemberReader`라는 인터페이스가 **호출의 모양**만 같게 만들어 줄 뿐, **호출의 성질**까지 같게 만들어 주지는 못한다는 데 있습니다.
+
+| | 메서드 호출 (모놀리스) | 네트워크 호출 (MSA) |
+| --- | --- | --- |
+| 실패 | 거의 없다. 호출하면 실행된다 | 언제든 실패한다. 상대 서비스가 죽어 있을 수도 있다 |
+| 속도 | 나노초 단위 | 밀리초 단위. 때로는 몇 초 |
+| 결과를 모르는 경우 | 없다 | 있다. 응답이 오지 않으면 처리됐는지 알 수 없다 |
+| 트랜잭션 | 하나로 묶을 수 있다 | 서비스마다 따로다 |
+| 데이터 | 항상 최신을 본다 | 잠시 어긋난 상태를 볼 수 있다 |
+
+`getStatus(memberId)`라는 시그니처는 "부르면 값이 온다"고 말합니다. 네트워크 너머에서는 이 약속이 지켜지지 않을 수 있는데, 시그니처에는 그 사실이 드러나지 않습니다.
+
+### 2.1 네트워크 장애
+
+모놀리스에서는 회원 모듈만 죽고 주문 모듈만 살아 있는 상황이 없습니다. 같은 프로세스이므로 함께 살고 함께 죽습니다. MSA에서는 **한쪽만 죽는 상황**이 일상입니다.
+
+더 까다로운 것은 응답이 오지 않는 경우입니다. 호출한 쪽은 다음 셋을 구분할 수 없습니다.
+
+| 실제로 일어난 일 | 호출한 쪽이 보는 것 |
+| --- | --- |
+| 요청이 가는 길에 사라졌다 | 타임아웃 |
+| 상대가 처리하다가 죽었다 | 타임아웃 |
+| 상대는 처리를 끝냈는데 응답이 오는 길에 사라졌다 | 타임아웃 |
+
+조회라면 다시 시도하면 그만이지만, "포인트 차감" 같은 요청이라면 재시도했을 때 두 번 차감될 수 있습니다. 그래서 같은 요청을 여러 번 받아도 결과가 한 번 처리한 것과 같도록 만드는 **멱등성(Idempotency)** 설계가 필요해집니다.
+
+### 2.2 호출 지연
+
+메서드 호출은 사실상 비용이 없어서 반복문 안에서 수백 번 불러도 문제가 되지 않습니다. 같은 코드가 네트워크 호출이 되면 사정이 달라집니다.
+
+<CodeTabs>
+
+```java
+// 모놀리스에서는 문제없던 코드
+for (Order order : orders) {
+    MemberStatus status = memberReader.getStatus(order.getMemberId());   // MSA에서는 주문 수만큼 HTTP 호출
+    // ...
+}
+```
+
+```kotlin
+// 모놀리스에서는 문제없던 코드
+orders.forEach { order ->
+    val status = memberReader.getStatus(order.memberId)   // MSA에서는 주문 수만큼 HTTP 호출
+    // ...
+}
+```
+
+</CodeTabs>
+
+주문이 100건이면 HTTP 호출도 100번입니다. 한 번에 10ms만 걸려도 1초가 됩니다.
+
+지연은 장애로 번지기도 합니다. 회원 서비스가 느려지면 응답을 기다리는 주문 서비스의 스레드가 쌓이고, 결국 주문 서비스도 다른 요청을 받지 못하게 됩니다. 한 서비스의 문제가 호출하는 쪽으로 차례차례 번지는 **연쇄 장애**입니다. 이를 막으려면 타임아웃을 정하고, 계속 실패하는 상대에게는 한동안 호출을 보내지 않는 서킷 브레이커(Circuit Breaker) 같은 장치를 따로 마련해야 합니다.
+
+### 2.3 분산 트랜잭션
+
+모놀리스에서는 여러 모듈의 작업을 트랜잭션 하나로 묶을 수 있습니다.
+
+<CodeTabs>
+
+```java
+// 모놀리스 : 둘 다 성공하거나, 둘 다 취소된다
+@Transactional
+public Order placeOrder(Long memberId, List<OrderItem> items, long usePoint) {
+    pointService.use(memberId, usePoint);                       // 같은 DB
+    return orderRepository.save(Order.create(memberId, items)); // 같은 DB
+}
+```
+
+```kotlin
+// 모놀리스 : 둘 다 성공하거나, 둘 다 취소된다
+@Transactional
+fun placeOrder(memberId: Long, items: List<OrderItem>, usePoint: Long): Order {
+    pointService.use(memberId, usePoint)                       // 같은 DB
+    return orderRepository.save(Order.create(memberId, items)) // 같은 DB
+}
+```
+
+</CodeTabs>
+
+주문 저장에 실패하면 포인트 차감도 함께 취소됩니다. 데이터베이스가 보장해 주는 일입니다.
+
+포인트가 다른 서비스로 분리되면 `pointService.use(...)`는 HTTP 호출이 되고, 그 서비스는 자기 데이터베이스에 자기 트랜잭션으로 커밋합니다. `@Transactional`은 내 서비스의 데이터베이스까지만 책임집니다.
+
+| 순서 | 일어난 일 | 결과 |
+| --- | --- | --- |
+| 1 | 포인트 서비스에 차감 요청 | 성공. 포인트 서비스 DB에 이미 커밋됨 |
+| 2 | 주문 저장 | 실패. 주문 서비스 DB는 롤백됨 |
+| 3 | - | **포인트만 차감되고 주문은 없다** |
+
+코드는 그대로인데 "둘 다 성공하거나 둘 다 취소된다"는 보장이 사라졌습니다. 이를 다시 맞추려면 실패했을 때 앞 단계를 되돌리는 요청(보상 트랜잭션)을 직접 설계해야 하고, 이런 흐름을 다루는 방식이 사가(Saga) 패턴입니다.
+
+### 2.4 일시적인 데이터 불일치
+
+서비스마다 데이터베이스를 따로 가지면, 한쪽의 변경이 다른 쪽에 반영되기까지 시간이 걸립니다. 회원이 탈퇴한 직후 몇 초 동안은 주문 서비스가 그 회원을 아직 정상 회원으로 알고 있을 수 있습니다.
+
+이런 상태를 없앨 수는 없고, "잠시 어긋나도 결국에는 맞춰진다"는 **최종 일관성(Eventual Consistency)** 을 받아들이는 설계가 필요합니다. 어긋난 동안 일어난 일을 어떻게 처리할지는 기술이 아니라 업무 규칙으로 정해야 합니다. 탈퇴 직후 들어온 주문을 취소할지, 그대로 둘지 같은 것들입니다.
+
+---
+
+## 3. 요구사항에 따라 통신 방식이 달라진다
+
+그래서 MSA로 전환할 때는 인터페이스마다 "HTTP 구현체로 바꾼다"로 일괄 처리할 수 없습니다. 그 호출이 **어떤 요구사항을 위한 것인지**에 따라 통신 방식을 골라야 합니다.
+
+| 요구사항 | 고려할 통신 방식 |
+| --- | --- |
+| 주문 시 회원의 현재 상태를 즉시 확인 | 동기 HTTP/gRPC |
+| 회원 탈퇴를 주문에 전파 | 비동기 이벤트 |
+| 주문 생성 후 알림 전송 | 비동기 이벤트 |
+| 주문에서 회원 상태를 빈번하게 조회 | 로컬 조회 모델 또는 캐시 |
+| 회원과 주문의 강한 정합성이 필요한 업무 | 데이터 소유권과 비즈니스 트랜잭션 경계 재검토 |
+
+### 3.1 지금 이 순간의 값이 필요하다: 동기 호출
+
+정지된 회원의 주문을 막아야 한다면, 주문하는 그 순간의 회원 상태가 필요합니다. 응답을 받을 때까지 기다리는 **동기 호출**(HTTP, gRPC)이 맞습니다.
+
+대신 회원 서비스가 응답하지 않을 때 어떻게 할지를 정해야 합니다. 주문을 거절할 것인지, 일단 받아 두고 나중에 검증할 것인지는 업무가 결정할 문제이고, 어느 쪽이든 타임아웃은 반드시 걸어야 합니다.
+
+### 3.2 알려 주기만 하면 된다: 비동기 이벤트
+
+회원이 탈퇴하면 주문 쪽에서도 처리할 일이 있습니다. 그렇다고 회원 서비스가 주문 서비스를 직접 호출하면, 주문 서비스가 죽어 있을 때 회원이 탈퇴하지 못하게 됩니다.
+
+회원 서비스는 "회원이 탈퇴했다"는 **이벤트**를 메시지 브로커에 발행하기만 하고, 주문 서비스가 그것을 받아 자기 할 일을 합니다.
+
+| | 동기 호출 | 비동기 이벤트 |
+| --- | --- | --- |
+| 보내는 쪽 | 상대의 응답을 기다린다 | 발행하고 바로 다음 일을 한다 |
+| 상대가 죽어 있으면 | 나도 실패한다 | 영향 없다. 상대가 살아난 뒤 처리한다 |
+| 결과 반영 | 즉시 | 조금 뒤 |
+
+주문 생성 후 알림 전송도 같습니다. 알림이 몇 초 늦어도 주문 자체에는 문제가 없고, 알림 서비스의 장애 때문에 주문이 실패해서는 안 됩니다. 결과를 기다릴 필요가 없는 일은 이벤트로 넘깁니다.
+
+### 3.3 너무 자주 물어본다: 로컬 조회 모델 또는 캐시
+
+주문 목록을 보여 줄 때마다 회원 이름과 등급이 필요하다면, 매번 회원 서비스를 호출하는 것은 느리고 회원 서비스에 대한 의존도 커집니다.
+
+| 방법 | 내용 |
+| --- | --- |
+| 캐시 | 한 번 조회한 값을 일정 시간 동안 다시 쓴다 |
+| 로컬 조회 모델 | 회원 서비스의 이벤트를 받아, 주문 서비스 DB에 필요한 회원 정보의 복사본을 유지한다 |
+
+두 방법 모두 호출 횟수를 크게 줄이지만, 복사본이므로 원본과 잠시 어긋날 수 있습니다. 그 정도의 오차를 허용해도 되는 조회에만 써야 합니다.
+
+### 3.4 반드시 함께 바뀌어야 한다: 경계를 다시 본다
+
+"이 두 데이터는 단 한순간도 어긋나면 안 된다"는 요구가 서비스 경계를 넘나든다면, 통신 방식을 고르기 전에 질문을 바꿔야 합니다.
+
+> 이 둘을 서로 다른 서비스로 나눈 것이 맞는가?
+
+강한 정합성이 필요한 데이터는 한 트랜잭션으로 묶을 수 있도록 **같은 서비스가 소유**하는 편이 자연스럽습니다. 서비스를 나눈 뒤 분산 트랜잭션으로 억지로 묶는 것보다, 경계를 다시 긋는 쪽이 대개 더 단순하고 안전합니다.
+
+---
+
+## 4. 그래도 인터페이스로 나누는 것은 의미가 있다
+
+인터페이스가 분산 시스템의 문제를 없애 주지 못한다고 해서 쓸모없는 것은 아닙니다.
+
+| 인터페이스가 해 주는 것 | 인터페이스가 해 주지 못하는 것 |
+| --- | --- |
+| 모듈 간 호출 지점이 한눈에 보인다 | 네트워크 장애와 지연에 대한 대응 |
+| 전환할 때 고칠 코드의 범위가 줄어든다 | 트랜잭션이 끊어지는 문제 |
+| 모듈이 서로의 내부 구현에 얽히지 않는다 | 데이터가 잠시 어긋나는 문제 |
+
+모놀리스 단계에서 미리 해 둘 수 있는 일도 있습니다.
+
+- **모듈 경계를 넘는 트랜잭션에 기대지 않는다.** 다른 모듈의 작업까지 `@Transactional` 하나로 묶어 두었다면, 그곳이 전환할 때 가장 먼저 깨지는 지점입니다.
+- **다른 모듈의 데이터는 ID로만 참조한다.** 주문이 회원 엔티티를 직접 들고 있거나 회원 테이블을 조인하고 있다면 데이터베이스를 나눌 수 없습니다. 자세한 내용은 [MSA를 지향한다면: 데이터베이스 소유권 설계](/blog/groups/cs/architecture/msa_database_ownership)에 정리했습니다.
+- **결과를 기다릴 필요가 없는 일은 지금부터 이벤트로 처리한다.** 모놀리스 안에서도 이벤트로 연결해 두면, 나중에 메시지 브로커로 옮기기 쉽습니다. 자세한 내용은 [MSA 전환을 위한 이벤트 기반 설계](/blog/groups/server/spring_boot/spring_boot_event_driven_design)에 정리했습니다.
+- **반복문 안에서 다른 모듈을 호출하지 않는다.** 여러 건을 한 번에 조회하는 메서드를 인터페이스에 두면 네트워크 호출이 되어도 버틸 수 있습니다.
+
+---
+
+## 5. 마무리
+
+인터페이스를 유지하면 모놀리스에서 MSA로 갈 때 **코드 변경 범위는 줄일 수 있지만, 분산 시스템의 복잡성은 제거하지 못합니다.** 메서드 호출이 네트워크 호출로 바뀌는 순간 네트워크 장애, 호출 지연, 일시적인 데이터 불일치, 분산 트랜잭션이라는 문제가 새로 생기기 때문입니다.
+
+그래서 전환은 구현체를 갈아 끼우는 작업이 아니라, 호출 하나하나에 대해 다음을 판단하는 작업입니다.
+
+- 지금 이 순간의 값이 필요한가 → 동기 호출
+- 알려 주기만 하면 되는가 → 비동기 이벤트
+- 자주 조회하고 약간의 오차는 괜찮은가 → 로컬 조회 모델 또는 캐시
+- 반드시 함께 바뀌어야 하는가 → 서비스 경계를 다시 검토
+
+---
+
+#### 📕 Reference
+
+- Sam Newman, 『Building Microservices』 2nd Edition, Chapter 4 "Microservice Communication Styles", Chapter 6 "Workflow"
+- Chris Richardson, 『Microservices Patterns』, Chapter 3 "Interprocess communication in a microservice architecture", Chapter 4 "Managing transactions with sagas"
+- Martin Kleppmann, 『Designing Data-Intensive Applications』, Chapter 8 "The Trouble with Distributed Systems"
+- Martin Fowler, [Microservices and the First Law of Distributed Objects](https://martinfowler.com/articles/distributed-objects-microservices.html)
+- L. Peter Deutsch, Fallacies of Distributed Computing (분산 컴퓨팅의 오류)

@@ -1,6 +1,6 @@
 ---
 title: "데코레이터 패턴(Decorator Pattern): 객체를 감싸서 기능을 덧붙이기"
-desc: "기능 조합이 늘어날 때 상속이 왜 한계에 부딪히는지, 데코레이터 패턴이 객체를 감싸는 방식으로 이를 어떻게 해결하는지 Kotlin 코드로 정리합니다."
+desc: "기능 조합이 늘어날 때 상속이 왜 한계에 부딪히는지, 데코레이터 패턴이 객체를 감싸는 방식으로 이를 어떻게 해결하는지 코드로 정리합니다."
 date: 2026-11-13 19:20
 thumbnail: ./thumbnail.webp
 isHot: false
@@ -22,12 +22,37 @@ tags: Design Pattern, Decorator, Delegation, Kotlin
 
 상속으로 풀면 조합마다 클래스가 하나씩 필요합니다.
 
+<CodeTabs>
+
+```java
+class Americano {}
+class AmericanoWithMilk extends Americano {}
+class AmericanoWithShot extends Americano {}
+class AmericanoWithMilkAndShot extends Americano {}
+```
+
 ```kotlin
 open class Americano
 class AmericanoWithMilk : Americano()
 class AmericanoWithShot : Americano()
 class AmericanoWithMilkAndShot : Americano()
 ```
+
+```python
+class Americano: ...
+class AmericanoWithMilk(Americano): ...
+class AmericanoWithShot(Americano): ...
+class AmericanoWithMilkAndShot(Americano): ...
+```
+
+```javascript
+class Americano {}
+class AmericanoWithMilk extends Americano {}
+class AmericanoWithShot extends Americano {}
+class AmericanoWithMilkAndShot extends Americano {}
+```
+
+</CodeTabs>
 
 옵션이 2개일 때 이미 4개입니다. 휘핑크림이 추가되면 8개, 시럽까지 추가되면 16개가 됩니다. 게다가 "샷 2번 추가"처럼 같은 옵션을 여러 번 넣는 경우는 표현할 방법이 없습니다.
 
@@ -45,7 +70,7 @@ class AmericanoWithMilkAndShot : Americano()
 
 **데코레이터 패턴(Decorator Pattern)** 은 객체를 **같은 인터페이스를 가진 다른 객체로 감싸서** 기능을 덧붙이는 패턴입니다.<sup>[부록 1](#appendix-1)</sup>
 
-"감싼다"는 비유적인 표현입니다. 코드로는 **"다른 객체를 프로퍼티로 갖고 있다가, 요청이 오면 그 객체에게 먼저 넘긴다"** 는 뜻입니다.
+"감싼다"는 비유적인 표현입니다. 코드로는 **"다른 객체를 자기 안에 갖고 있다가, 요청이 오면 그 객체에게 먼저 넘긴다"** 는 뜻입니다.
 
 ### 2.1 구성 요소
 
@@ -72,6 +97,27 @@ Decorator는 이 두 선을 **모두** 갖고 있습니다. 구현하기 때문�
 
 ### 3.1 Component와 원본 객체
 
+<CodeTabs>
+
+```java
+interface Coffee {
+    int cost();
+    String description();
+}
+
+class Americano implements Coffee {
+    @Override
+    public int cost() {
+        return 3000;
+    }
+
+    @Override
+    public String description() {
+        return "아메리카노";
+    }
+}
+```
+
 ```kotlin
 interface Coffee {
     fun cost(): Int
@@ -84,7 +130,84 @@ class Americano : Coffee {
 }
 ```
 
+```python
+from abc import ABC, abstractmethod
+
+
+class Coffee(ABC):
+    @abstractmethod
+    def cost(self) -> int: ...
+
+    @abstractmethod
+    def description(self) -> str: ...
+
+
+class Americano(Coffee):
+    def cost(self) -> int:
+        return 3000
+
+    def description(self) -> str:
+        return "아메리카노"
+```
+
+```javascript
+// JavaScript에는 interface가 없다.
+// "cost()와 description()을 가진 객체"를 Coffee라고 약속한다.
+
+class Americano {
+  cost() {
+    return 3000;
+  }
+
+  description() {
+    return '아메리카노';
+  }
+}
+```
+
+</CodeTabs>
+
 ### 3.2 Decorator
+
+<CodeTabs>
+
+```java
+class Milk implements Coffee {
+    private final Coffee coffee;
+
+    Milk(Coffee coffee) {
+        this.coffee = coffee;
+    }
+
+    @Override
+    public int cost() {
+        return coffee.cost() + 500;
+    }
+
+    @Override
+    public String description() {
+        return coffee.description() + " + 우유";
+    }
+}
+
+class Shot implements Coffee {
+    private final Coffee coffee;
+
+    Shot(Coffee coffee) {
+        this.coffee = coffee;
+    }
+
+    @Override
+    public int cost() {
+        return coffee.cost() + 500;
+    }
+
+    @Override
+    public String description() {
+        return coffee.description() + " + 샷";
+    }
+}
+```
 
 ```kotlin
 class Milk(private val coffee: Coffee) : Coffee {
@@ -98,11 +221,79 @@ class Shot(private val coffee: Coffee) : Coffee {
 }
 ```
 
+```python
+class Milk(Coffee):
+    def __init__(self, coffee: Coffee):
+        self._coffee = coffee
+
+    def cost(self) -> int:
+        return self._coffee.cost() + 500
+
+    def description(self) -> str:
+        return self._coffee.description() + " + 우유"
+
+
+class Shot(Coffee):
+    def __init__(self, coffee: Coffee):
+        self._coffee = coffee
+
+    def cost(self) -> int:
+        return self._coffee.cost() + 500
+
+    def description(self) -> str:
+        return self._coffee.description() + " + 샷"
+```
+
+```javascript
+class Milk {
+  #coffee;
+
+  constructor(coffee) {
+    this.#coffee = coffee;
+  }
+
+  cost() {
+    return this.#coffee.cost() + 500;
+  }
+
+  description() {
+    return this.#coffee.description() + ' + 우유';
+  }
+}
+
+class Shot {
+  #coffee;
+
+  constructor(coffee) {
+    this.#coffee = coffee;
+  }
+
+  cost() {
+    return this.#coffee.cost() + 500;
+  }
+
+  description() {
+    return this.#coffee.description() + ' + 샷';
+  }
+}
+```
+
+</CodeTabs>
+
 `Milk`는 `Coffee`를 생성자로 받아 보관하고, 자신도 `Coffee`입니다. 가격을 물으면 안에 있는 커피에게 먼저 물어본 뒤 500원을 더해 대답합니다.
 
 ### 3.3 사용
 
 이제 아메리카노를 우유로 감싸고, 그것을 다시 샷으로 감쌉니다.
+
+<CodeTabs>
+
+```java
+Coffee coffee = new Shot(new Milk(new Americano()));
+
+System.out.println(coffee.description());   // 아메리카노 + 우유 + 샷
+System.out.println(coffee.cost());          // 4000
+```
 
 ```kotlin
 val coffee: Coffee = Shot(Milk(Americano()))
@@ -110,6 +301,22 @@ val coffee: Coffee = Shot(Milk(Americano()))
 println(coffee.description())   // 아메리카노 + 우유 + 샷
 println(coffee.cost())          // 4000
 ```
+
+```python
+coffee: Coffee = Shot(Milk(Americano()))
+
+print(coffee.description())   # 아메리카노 + 우유 + 샷
+print(coffee.cost())          # 4000
+```
+
+```javascript
+const coffee = new Shot(new Milk(new Americano()));
+
+console.log(coffee.description());   // 아메리카노 + 우유 + 샷
+console.log(coffee.cost());          // 4000
+```
+
+</CodeTabs>
 
 `coffee.cost()`를 호출하면 바깥에서 안쪽으로 질문이 전달되고, 안쪽에서 바깥으로 답이 쌓여 나옵니다.
 
@@ -119,10 +326,29 @@ println(coffee.cost())          // 4000
 
 조합이 늘어나도 클래스는 늘어나지 않습니다. 감싸는 순서와 횟수만 바꾸면 됩니다.
 
+<CodeTabs>
+
+```java
+new Shot(new Shot(new Americano()));    // 샷 2번 추가: 4000
+new Milk(new Americano());              // 우유만: 3500
+```
+
 ```kotlin
 Shot(Shot(Americano()))         // 샷 2번 추가: 4000
 Milk(Americano())               // 우유만: 3500
 ```
+
+```python
+Shot(Shot(Americano()))         # 샷 2번 추가: 4000
+Milk(Americano())               # 우유만: 3500
+```
+
+```javascript
+new Shot(new Shot(new Americano()));    // 샷 2번 추가: 4000
+new Milk(new Americano());              // 우유만: 3500
+```
+
+</CodeTabs>
 
 상속으로는 옵션 4개에 클래스 16개가 필요했지만, 여기서는 옵션 하나당 클래스 하나로 끝납니다.
 
@@ -171,7 +397,7 @@ val reader = BufferedReader(InputStreamReader(FileInputStream("a.txt")))
 | 장점 | 기능 하나가 클래스 하나에 담겨 역할이 분명하다 |
 | 단점 | 작은 클래스가 많아지고, 겹이 깊어지면 흐름을 따라가기 어렵다 |
 | 단점 | 감싸는 순서에 따라 결과가 달라질 수 있다 |
-| 단점 | 감싼 뒤에는 원본 타입이 가려진다 (`coffee is Americano`가 `false`) |
+| 단점 | 감싼 뒤에는 원본 타입이 가려진다 (`Americano`인지 검사하면 거짓이 나온다) |
 
 ---
 
@@ -193,6 +419,27 @@ val reader = BufferedReader(InputStreamReader(FileInputStream("a.txt")))
 
 커피 가격을 계산하는 코드를 예시로 하나씩 살펴보겠습니다.
 
+<CodeTabs>
+
+```java
+interface Coffee {
+    int cost();
+    String description();
+}
+
+class Americano implements Coffee {
+    @Override
+    public int cost() {
+        return 3000;
+    }
+
+    @Override
+    public String description() {
+        return "아메리카노";
+    }
+}
+```
+
 ```kotlin
 interface Coffee {
     fun cost(): Int
@@ -205,7 +452,61 @@ class Americano : Coffee {
 }
 ```
 
+```python
+from abc import ABC, abstractmethod
+
+
+class Coffee(ABC):
+    @abstractmethod
+    def cost(self) -> int: ...
+
+    @abstractmethod
+    def description(self) -> str: ...
+
+
+class Americano(Coffee):
+    def cost(self) -> int:
+        return 3000
+
+    def description(self) -> str:
+        return "아메리카노"
+```
+
+```javascript
+// JavaScript에는 interface가 없다.
+// "cost()와 description()을 가진 객체"를 Coffee라고 약속한다.
+
+class Americano {
+  cost() {
+    return 3000;
+  }
+
+  description() {
+    return '아메리카노';
+  }
+}
+```
+
+</CodeTabs>
+
 #### "감싼다"는 안에 넣어 둔다는 뜻이다
+
+<CodeTabs>
+
+```java
+class Milk implements Coffee {
+    private final Coffee coffee;
+
+    Milk(Coffee coffee) {
+        this.coffee = coffee;
+    }
+
+    /* ... */
+}
+
+Americano americano = new Americano();
+Milk milk = new Milk(americano);    // milk 안에 americano를 넣어 둠
+```
 
 ```kotlin
 class Milk(private val coffee: Coffee) : Coffee { /* ... */ }
@@ -214,7 +515,36 @@ val americano = Americano()
 val milk = Milk(americano)    // milk 안에 americano를 넣어 둠
 ```
 
-`Milk`는 생성자로 받은 커피를 자기 프로퍼티(`coffee`)에 보관합니다. 이 상태를 "`milk`가 `americano`를 감쌌다"고 부릅니다.
+```python
+class Milk(Coffee):
+    def __init__(self, coffee: Coffee):
+        self._coffee = coffee
+
+    # ...
+
+
+americano = Americano()
+milk = Milk(americano)    # milk 안에 americano를 넣어 둠
+```
+
+```javascript
+class Milk {
+  #coffee;
+
+  constructor(coffee) {
+    this.#coffee = coffee;
+  }
+
+  /* ... */
+}
+
+const americano = new Americano();
+const milk = new Milk(americano);    // milk 안에 americano를 넣어 둠
+```
+
+</CodeTabs>
+
+`Milk`는 생성자로 받은 커피를 자기 안(`coffee`)에 보관합니다. 이 상태를 "`milk`가 `americano`를 감쌌다"고 부릅니다.
 
 | 표현 | 가리키는 것 | 위 코드에서 |
 | --- | --- | --- |
@@ -222,6 +552,30 @@ val milk = Milk(americano)    // milk 안에 americano를 넣어 둠
 | 감싸인 것 | 안쪽. 들어 있는 쪽 | `americano` |
 
 #### "기능을 덧붙인다"는 안쪽에 물어본 뒤 내 몫을 더한다는 뜻이다
+
+<CodeTabs>
+
+```java
+class Milk implements Coffee {
+    private final Coffee coffee;
+
+    Milk(Coffee coffee) {
+        this.coffee = coffee;
+    }
+
+    @Override
+    public int cost() {
+        return coffee.cost() + 500;
+        //     ^^^^^^^^^^^^^ ^^^^^
+        //     안쪽에 물어봄   내 몫을 더함
+    }
+
+    @Override
+    public String description() {
+        return coffee.description() + " + 우유";
+    }
+}
+```
 
 ```kotlin
 class Milk(private val coffee: Coffee) : Coffee {
@@ -232,6 +586,42 @@ class Milk(private val coffee: Coffee) : Coffee {
 }
 ```
 
+```python
+class Milk(Coffee):
+    def __init__(self, coffee: Coffee):
+        self._coffee = coffee
+
+    def cost(self) -> int:
+        return self._coffee.cost() + 500
+        #      ^^^^^^^^^^^^^^^^^^^ ^^^^^
+        #      안쪽에 물어봄         내 몫을 더함
+
+    def description(self) -> str:
+        return self._coffee.description() + " + 우유"
+```
+
+```javascript
+class Milk {
+  #coffee;
+
+  constructor(coffee) {
+    this.#coffee = coffee;
+  }
+
+  cost() {
+    return this.#coffee.cost() + 500;
+    //     ^^^^^^^^^^^^^^^^^^^ ^^^^^
+    //     안쪽에 물어봄         내 몫을 더함
+  }
+
+  description() {
+    return this.#coffee.description() + ' + 우유';
+  }
+}
+```
+
+</CodeTabs>
+
 `milk.cost()`를 호출하면 `Milk`는 가격을 직접 계산하지 않습니다. 안에 든 `americano`에게 물어 3000을 받고, 거기에 500을 더해 3500이라고 답합니다.
 
 `Americano` 클래스는 한 글자도 고치지 않았는데 "우유 추가" 기능이 붙었습니다. 이것이 "덧붙인다"의 의미입니다.
@@ -239,6 +629,22 @@ class Milk(private val coffee: Coffee) : Coffee {
 #### "같은 인터페이스"는 바깥 것도 여전히 Coffee라는 뜻이다
 
 이 조건이 왜 필요한지는 없을 때와 비교하면 보입니다. 샷을 추가하는 `Shot`도 `Milk`와 같은 모양으로, `Coffee`를 받아 보관한다고 하겠습니다.
+
+<CodeTabs>
+
+```java
+// ❌ Milk가 Coffee가 아닌 경우
+class Milk {                        // "implements Coffee"가 없다
+    private final Coffee coffee;
+
+    Milk(Coffee coffee) {
+        this.coffee = coffee;
+    }
+}
+
+Milk milk = new Milk(new Americano());
+Shot shot = new Shot(milk);     // 컴파일 에러: Shot은 Coffee를 받는데 milk는 Coffee가 아니다
+```
 
 ```kotlin
 // ❌ Milk가 Coffee가 아닌 경우
@@ -248,6 +654,45 @@ val milk = Milk(Americano())
 val shot = Shot(milk)     // 컴파일 에러: Shot은 Coffee를 받는데 milk는 Coffee가 아니다
 ```
 
+```python
+# ❌ Milk가 Coffee가 아닌 경우
+class Milk:                         # "(Coffee)"가 없고 cost()도 없다
+    def __init__(self, coffee: Coffee):
+        self._coffee = coffee
+
+
+milk = Milk(Americano())
+shot = Shot(milk)     # 만들 때는 에러가 없다 (타입 검사기를 쓰면 여기서 경고한다)
+shot.cost()           # AttributeError: milk에 cost()가 없다
+```
+
+```javascript
+// ❌ Milk가 Coffee가 아닌 경우
+class Milk {                        // cost()와 description()이 없다
+  #coffee;
+
+  constructor(coffee) {
+    this.#coffee = coffee;
+  }
+}
+
+const milk = new Milk(new Americano());
+const shot = new Shot(milk);    // 만들 때는 에러가 없다
+shot.cost();                    // TypeError: milk에 cost()가 없다
+```
+
+</CodeTabs>
+
+<CodeTabs>
+
+```java
+// ✅ Milk도 Coffee인 경우
+class Milk implements Coffee { /* ... */ }
+
+Milk milk = new Milk(new Americano());
+Shot shot = new Shot(milk);     // OK: milk도 Coffee이므로 또 넣을 수 있다
+```
+
 ```kotlin
 // ✅ Milk도 Coffee인 경우
 class Milk(private val coffee: Coffee) : Coffee
@@ -255,6 +700,30 @@ class Milk(private val coffee: Coffee) : Coffee
 val milk = Milk(Americano())
 val shot = Shot(milk)     // OK: milk도 Coffee이므로 또 넣을 수 있다
 ```
+
+```python
+# ✅ Milk도 Coffee인 경우
+class Milk(Coffee):
+    ...  # cost()와 description()을 구현한다
+
+
+milk = Milk(Americano())
+shot = Shot(milk)     # OK: milk도 Coffee이므로 또 넣을 수 있다
+```
+
+```javascript
+// ✅ Milk도 Coffee인 경우
+class Milk {
+  /* cost()와 description()을 구현한다 */
+}
+
+const milk = new Milk(new Americano());
+const shot = new Shot(milk);    // OK: milk도 Coffee이므로 또 넣을 수 있다
+```
+
+</CodeTabs>
+
+문제가 드러나는 시점은 언어마다 다릅니다. Java와 Kotlin은 컴파일할 때 막아 주고, Python과 JavaScript는 실행 중에 `cost()`를 호출하는 순간 에러가 납니다. 어느 쪽이든 원인은 같습니다. 안에 넣은 것이 `Coffee`가 아니기 때문입니다.
 
 `Milk`가 `Coffee`이기 때문에 두 가지가 가능해집니다.
 

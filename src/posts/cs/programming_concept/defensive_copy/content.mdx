@@ -32,7 +32,26 @@ Kotlin과 DDD 아키텍처 도입을 고민하며 **데이터 가변성 통제(D
 
 **객체를 참조하는 값을 외부에 노출하면, 외부에서도 동일한 객체에 접근할 수 있다는 점입니다.**
 
-예를 들어, 다음 Kotlin 코드를 살펴보겠습니다.
+예를 들어, 다음 코드를 살펴보겠습니다.
+
+<CodeTabs>
+
+```java
+class Order {
+    private final List<String> items;
+
+    Order(List<String> items) {
+        this.items = items;
+    }
+
+    List<String> getItems() {
+        return items;
+    }
+}
+
+Order order = new Order(new ArrayList<>(List.of("상품 A")));
+order.getItems().clear();
+```
 
 ```kotlin
 class Order(
@@ -45,7 +64,39 @@ val order = Order(mutableListOf("상품 A"))
 order.getItems().clear()
 ```
 
-`items`를 `private`으로 선언했음에도 외부에서 `clear()`를 호출하여 주문 상품 목록을 변경할 수 있습니다.
+```python
+class Order:
+    def __init__(self, items: list[str]):
+        self._items = items
+
+    def get_items(self) -> list[str]:
+        return self._items
+
+
+order = Order(["상품 A"])
+order.get_items().clear()
+```
+
+```javascript
+class Order {
+  #items;
+
+  constructor(items) {
+    this.#items = items;
+  }
+
+  getItems() {
+    return this.#items;
+  }
+}
+
+const order = new Order(['상품 A']);
+order.getItems().length = 0;
+```
+
+</CodeTabs>
+
+`items`를 외부에서 직접 접근하지 못하게 숨겼음에도, Getter로 받은 목록을 비우면 주문 상품 목록이 변경됩니다.
 
 Getter가 내부 컬렉션의 참조를 그대로 반환하기 때문입니다.
 
@@ -90,7 +141,32 @@ Getter가 내부 컬렉션의 참조를 그대로 반환하기 때문입니다.
 - **입력 시점:** 외부에서 전달받은 객체가 변경되더라도 내부 상태에 영향을 주지 않도록 보호합니다.
 - **출력 시점:** 외부에서 반환받은 객체를 변경하더라도 내부 상태에 영향을 주지 않도록 보호합니다.
 
-다음은 Kotlin에서 방어적 복사와 캡슐화를 적용한 예시입니다.
+다음은 방어적 복사와 캡슐화를 적용한 예시입니다.
+
+<CodeTabs>
+
+```java
+record OrderItem(long productId, int quantity) {}
+
+class Order {
+    private final List<OrderItem> items;
+
+    Order(List<OrderItem> initialItems) {
+        this.items = new ArrayList<>(initialItems);
+    }
+
+    List<OrderItem> getItems() {
+        return List.copyOf(items);
+    }
+
+    void addItem(OrderItem item) {
+        if (item.quantity() <= 0) {
+            throw new IllegalArgumentException();
+        }
+        items.add(item);
+    }
+}
+```
 
 ```kotlin
 data class OrderItem(
@@ -110,13 +186,69 @@ class Order(initialItems: List<OrderItem>) {
 }
 ```
 
+```python
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class OrderItem:
+    product_id: int
+    quantity: int
+
+
+class Order:
+    def __init__(self, initial_items: list[OrderItem]):
+        self._items = list(initial_items)
+
+    def get_items(self) -> tuple[OrderItem, ...]:
+        return tuple(self._items)
+
+    def add_item(self, item: OrderItem) -> None:
+        if item.quantity <= 0:
+            raise ValueError
+        self._items.append(item)
+```
+
+```javascript
+class OrderItem {
+  constructor(productId, quantity) {
+    this.productId = productId;
+    this.quantity = quantity;
+    Object.freeze(this);
+  }
+}
+
+class Order {
+  #items;
+
+  constructor(initialItems) {
+    this.#items = [...initialItems];
+  }
+
+  getItems() {
+    return [...this.#items];
+  }
+
+  addItem(item) {
+    if (item.quantity <= 0) {
+      throw new RangeError();
+    }
+    this.#items.push(item);
+  }
+}
+```
+
+</CodeTabs>
+
 여기서는 다음과 같이 데이터의 가변성을 통제합니다.
 
-- `toMutableList()`: 외부에서 전달받은 컬렉션과 내부 컬렉션을 분리합니다.
-- `toList()`: 내부 컬렉션을 외부에 그대로 노출하지 않고 읽기 전용 형태의 결과를 반환합니다.
-- `addItem()`: 도메인이 정의한 행위를 통해서만 상품을 추가하도록 제한합니다.
+| 하는 일 | Java | Kotlin | Python | JavaScript |
+| --- | --- | --- | --- | --- |
+| 외부에서 받은 컬렉션과 내부 컬렉션을 분리한다 | `new ArrayList<>(initialItems)` | `toMutableList()` | `list(initial_items)` | `[...initialItems]` |
+| 내부 컬렉션을 그대로 노출하지 않고 복사본을 반환한다 | `List.copyOf(items)` | `toList()` | `tuple(self._items)` | `[...this.#items]` |
+| 도메인이 정의한 행위로만 상품을 추가한다 | `addItem()` | `addItem()` | `add_item()` | `addItem()` |
 
-단, Kotlin의 `toList()`와 `toMutableList()`는 얕은 복사(Shallow Copy)이므로, 컬렉션에 포함된 요소 객체까지 복사하는 것은 아닙니다.
+단, 이 복사는 모두 얕은 복사(Shallow Copy)이므로, 컬렉션에 포함된 요소 객체까지 복사하는 것은 아닙니다.
 
 위 예제에서는 `OrderItem`의 프로퍼티가 모두 불변 값이므로, 요소의 참조가 공유되더라도 기존 요소의 상태가 변경되지 않습니다.
 

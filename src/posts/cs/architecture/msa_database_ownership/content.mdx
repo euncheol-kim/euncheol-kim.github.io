@@ -1,0 +1,270 @@
+---
+title: "MSA를 지향한다면: 데이터베이스 소유권 설계"
+desc: "코드는 모듈로 나눴는데 데이터베이스는 모두가 함께 쓰고 있다면, 서비스를 분리하려는 순간 발목을 잡힙니다. 다른 모듈의 테이블을 직접 조회하면 왜 문제가 되는지, 데이터 소유권이란 무엇인지, 하나의 데이터베이스 안에서 스키마와 계정으로 경계를 세우는 방법을 정리합니다."
+date: 2026-11-15 20:20
+thumbnail: ./thumbnail.webp
+isHot: false
+isVisible: true
+tags: Architecture, MSA, Database, Data Ownership, DDD
+---
+
+### 🌱 포스팅 작성 이유
+
+MSA를 염두에 두고 모놀리스를 설계할 때, 코드의 경계는 멀티 모듈과 인터페이스로 열심히 나누면서 데이터베이스의 경계는 놓치기 쉽습니다. 코드가 아무리 잘 나뉘어 있어도 테이블이 서로 얽혀 있으면 서비스를 떼어 낼 수 없습니다.
+
+데이터베이스에서 경계를 세운다는 것이 무엇인지, 지금 단계에서 무엇을 해 둘 수 있는지를 정리합니다.
+
+---
+
+## 1. 코드는 나눴는데 데이터베이스는 그대로다
+
+회원(`member`)과 주문(`order`)을 예로 들겠습니다. 이 글에서는 이렇게 업무 단위로 나눈 영역을 **BC(Bounded Context)** 라고 부릅니다. 지금은 모놀리스 안의 모듈이고, 나중에 독립 서비스가 될 후보입니다.
+
+흔한 구조는 다음과 같습니다.
+
+```text
+Member BC ──┐
+            ▼
+         Database
+            ▲
+Order BC  ──┘
+```
+
+**데이터베이스를 하나만 쓰는 것 자체는 문제가 아닙니다.** 초기에 데이터베이스를 여러 대 운영하는 것은 오히려 과합니다.
+
+문제는 주문이 **회원 소유의 테이블을 직접 조회하거나 변경하기 시작할 때** 생깁니다.
+
+---
+
+## 2. 다른 BC의 테이블을 직접 건드리면 생기는 일
+
+### 2.1 조인 한 줄이 만드는 결합
+
+주문 목록에 회원 이름을 함께 보여 주려고 다음 쿼리를 작성했다고 하겠습니다.
+
+```sql
+SELECT
+    o.id,
+    m.name
+FROM orders o
+JOIN members m ON o.member_id = m.id;
+```
+
+이 쿼리가 주문 모듈의 영속성 계층에 있다면, 주문은 회원의 **데이터 구조를 직접 알고 있는 것**입니다. `members`라는 테이블이 있고, 거기에 `id`와 `name` 컬럼이 있다는 사실에 의존합니다.
+
+| 상황 | 벌어지는 일 |
+| --- | --- |
+| 회원 팀이 `name`을 `first_name`, `last_name`으로 나눈다 | 주문의 쿼리가 깨진다. 회원 모듈의 코드는 한 줄도 건드리지 않았는데도 |
+| 회원을 독립 서비스로 분리해 데이터베이스를 옮긴다 | 다른 데이터베이스의 테이블과는 조인할 수 없다. 쿼리를 전부 다시 써야 한다 |
+
+코드에서는 `order` 모듈이 `member` 모듈의 클래스를 `import`하지 않도록 막았더라도, SQL을 통해 뒷문으로 의존하고 있는 셈입니다. 이런 의존은 컴파일러도, 모듈 의존성 설정도 잡아 주지 못합니다.
+
+### 2.2 직접 수정은 더 위험하다
+
+조회보다 더 나쁜 것은 다른 BC의 테이블을 직접 수정하는 것입니다.
+
+```sql
+-- 주문 모듈 안에서
+UPDATE members SET grade = 'VIP' WHERE id = ?;
+```
+
+회원 등급을 바꿀 때 지켜야 할 규칙(등급 변경 이력 저장, 알림 발송 등)은 회원 모듈의 코드에 있습니다. 테이블을 직접 수정하면 그 규칙을 모두 건너뜁니다. 회원 데이터가 왜 이렇게 됐는지를 회원 모듈의 코드만 봐서는 알 수 없게 됩니다.
+
+### 2.3 JPA 연관 관계도 같은 문제다
+
+SQL을 직접 쓰지 않아도 같은 결합이 생깁니다.
+
+<CodeTabs>
+
+```java
+// ❌ 주문이 회원 엔티티를 직접 참조한다
+@Entity
+public class Order {
+    @ManyToOne(fetch = FetchType.LAZY)
+    private Member member;
+}
+```
+
+```kotlin
+// ❌ 주문이 회원 엔티티를 직접 참조한다
+@Entity
+class Order(
+    @ManyToOne(fetch = FetchType.LAZY)
+    val member: Member,
+)
+```
+
+</CodeTabs>
+
+주문에서 회원의 이름에 접근하는 순간 JPA가 `members` 테이블을 조회합니다. 조인 쿼리를 직접 쓴 것과 다르지 않습니다. 다른 BC의 데이터는 엔티티가 아니라 **ID 값**으로만 가지고 있어야 합니다.
+
+<CodeTabs>
+
+```java
+// ✅ 회원의 식별자만 가진다
+@Entity
+public class Order {
+    private Long memberId;
+}
+```
+
+```kotlin
+// ✅ 회원의 식별자만 가진다
+@Entity
+class Order(
+    val memberId: Long,
+)
+```
+
+</CodeTabs>
+
+---
+
+## 3. 데이터 소유권
+
+해결의 기준은 **데이터 소유권(Data Ownership)** 입니다. 모든 테이블에는 주인이 하나 있고, 주인만 그 테이블을 읽고 씁니다.
+
+```text
+Member BC
+    │
+    ▼
+Member 소유 테이블 (members, ...)
+
+
+Order BC
+    │
+    ▼
+Order 소유 테이블 (orders, order_items, ...)
+```
+
+| 원칙 | 의미 |
+| --- | --- |
+| 테이블마다 주인은 하나다 | `members`는 회원 BC만 읽고 쓴다 |
+| 다른 BC의 테이블을 직접 읽지 않는다 | 조인, 서브쿼리, JPA 연관 관계 모두 해당한다 |
+| 다른 BC의 테이블을 직접 수정하지 않는다 | 필요하면 주인에게 요청한다 |
+| 다른 BC의 데이터는 ID로만 참조한다 | `orders.member_id`에는 값만 저장한다 |
+
+### 3.1 그러면 회원 이름은 어떻게 가져오는가
+
+조인을 쓸 수 없다면 주문 목록의 회원 이름은 다음 방법 중에서 고릅니다.
+
+| 방법 | 내용 | 어울리는 경우 |
+| --- | --- | --- |
+| 주인에게 물어본다 | 회원 모듈이 공개한 인터페이스로 조회해 애플리케이션에서 합친다 | 최신 값이 필요할 때 |
+| 필요한 값을 복사해 둔다 | 주문을 만들 때 주문자 이름을 `orders`에 함께 저장한다 | 주문 당시의 값이 의미 있을 때 (주문자명, 배송지 등) |
+| 조회용 복사본을 유지한다 | 회원의 변경 이벤트를 받아 주문 쪽에 조회 전용 테이블을 둔다 | 자주 조회하고 약간의 지연이 괜찮을 때 |
+
+첫 번째 방법을 쓸 때는 주문 건마다 한 번씩 물어보지 않도록, 여러 회원을 한 번에 조회하는 메서드를 두는 것이 좋습니다.
+
+<CodeTabs>
+
+```java
+public interface MemberReader {
+    Map<Long, String> getNames(Collection<Long> memberIds);
+}
+```
+
+```kotlin
+interface MemberReader {
+    fun getNames(memberIds: Collection<Long>): Map<Long, String>
+}
+```
+
+</CodeTabs>
+
+조인 한 줄이면 되던 일이 번거로워진 것은 사실입니다. 이것이 경계를 지키는 비용이고, 나중에 서비스를 분리할 때 치를 비용을 미리 조금씩 나누어 내는 것이기도 합니다.
+
+---
+
+## 4. 하나의 데이터베이스 안에서 경계 세우기
+
+소유권을 지키기 위해 데이터베이스 서버를 처음부터 여러 대 둘 필요는 없습니다. PostgreSQL 인스턴스 하나를 쓰더라도 **스키마(Schema)** 로 나눌 수 있습니다.
+
+```text
+commerce_db
+│
+├── member_schema
+│   └── members
+│
+└── order_schema
+    ├── orders
+    └── order_items
+```
+
+중요한 것은 물리적인 데이터베이스 서버의 개수가 아니라 **소유권**입니다. 스키마를 나누면 어느 테이블이 누구 것인지가 이름에 드러나고, 다른 BC의 테이블을 쓰려면 `member_schema.members`처럼 남의 스키마 이름을 적어야 하므로 코드 리뷰에서 눈에 띕니다.
+
+### 4.1 BC 사이의 외래 키는 신중하게
+
+`orders.member_id`에 `members.id`를 가리키는 외래 키(Foreign Key)를 거는 것은 자연스러워 보입니다. 하지만 BC를 서비스로 분리할 계획이라면 신중해야 합니다.
+
+| | BC 사이에 외래 키를 건다 | 걸지 않고 ID 값만 저장한다 |
+| --- | --- | --- |
+| 정합성 | 데이터베이스가 보장한다 | 애플리케이션이 책임진다 |
+| 데이터베이스 분리 | 외래 키를 먼저 걷어 내야 한다 | 그대로 옮길 수 있다 |
+| 삭제와 변경 | 주문이 있으면 회원을 지울 수 없는 등, 회원의 동작이 주문에 묶인다 | 서로 독립적이다 |
+| 위험 | 두 BC가 테이블 수준에서 결합된다 | 존재하지 않는 회원 ID를 가진 주문이 생길 수 있다 |
+
+외래 키는 서로 다른 데이터베이스 사이에는 걸 수 없으므로, 분리하는 날 어차피 사라질 제약입니다. 그 제약에 기대어 작성한 코드가 많을수록 분리가 어려워집니다. 같은 BC 안의 테이블끼리(`orders`와 `order_items`)는 외래 키를 그대로 쓰면 됩니다.
+
+### 4.2 스키마 분리만으로는 격리되지 않는다
+
+스키마 분리는 독립성을 **표현**하는 방법일 뿐, 접근을 막아 주지는 않습니다. 같은 데이터베이스 계정을 쓰는 한, 주문 모듈에서 `member_schema.members`를 조인하는 쿼리는 여전히 실행됩니다.
+
+확실히 막으려면 BC마다 **데이터베이스 계정을 따로** 만들고, 자기 스키마에만 권한을 줍니다.
+
+```sql
+-- 주문 BC 전용 계정 : order_schema에만 접근할 수 있다
+CREATE ROLE order_app LOGIN PASSWORD '...';
+
+GRANT USAGE ON SCHEMA order_schema TO order_app;
+GRANT SELECT, INSERT, UPDATE, DELETE
+    ON ALL TABLES IN SCHEMA order_schema TO order_app;
+
+-- member_schema에 대한 권한은 주지 않는다
+```
+
+이 계정으로 회원 테이블을 조회하면 데이터베이스가 거부합니다.
+
+```text
+ERROR:  permission denied for schema member_schema
+```
+
+규칙을 문서나 리뷰에 맡기지 않고 데이터베이스가 강제하게 되는 것입니다. 다만 모놀리스 하나에서 계정을 여러 개 쓰려면 BC마다 데이터베이스 연결(DataSource)을 따로 구성해야 하므로 설정이 복잡해집니다. 팀 규모와 분리 계획에 맞춰 어디까지 할지 정하면 됩니다.
+
+---
+
+## 5. 단계적으로 분리하기
+
+데이터베이스의 경계는 한 번에 세우지 않아도 됩니다.
+
+| 단계 | 구성 | 경계를 지키는 수단 |
+| --- | --- | --- |
+| 1 | 스키마 하나, 테이블마다 주인을 정한다 | 팀의 규칙과 코드 리뷰 |
+| 2 | BC마다 스키마를 나눈다 | 이름으로 드러나는 소유권 |
+| 3 | BC마다 계정을 나누고 권한을 제한한다 | 데이터베이스의 권한 검사 |
+| 4 | BC마다 데이터베이스 서버를 나눈다 | 물리적인 분리 |
+
+단계가 올라갈수록 격리는 확실해지고 운영 부담은 커집니다. 어느 단계에 있든 "다른 BC의 테이블을 직접 읽거나 쓰지 않는다"는 원칙을 지키고 있다면, 다음 단계로 넘어가는 일은 설정을 바꾸는 작업에 가까워집니다. 반대로 이 원칙이 무너져 있으면, 서버를 나누는 날 조인 쿼리와 외래 키를 하나하나 찾아 고쳐야 합니다.
+
+데이터베이스가 나뉘면 여러 BC에 걸친 작업을 트랜잭션 하나로 묶을 수 없게 됩니다. 이때 생기는 문제는 [로컬 호출과 원격 호출: 분산 시스템에서 달라지는 것](/blog/groups/cs/architecture/local_call_vs_remote_call)에서 다뤘습니다.
+
+---
+
+## 6. 마무리
+
+MSA를 지향한다면 코드의 경계만큼 **데이터의 경계**가 중요합니다. 핵심은 데이터베이스 서버를 몇 대 두느냐가 아니라, 각 BC가 자기 데이터를 스스로 소유하느냐입니다.
+
+- 테이블마다 주인은 하나이고, 주인만 읽고 쓴다
+- 다른 BC의 데이터는 조인이나 연관 관계가 아니라 ID로 참조하고, 필요하면 주인에게 요청한다
+- BC 사이의 외래 키는 분리할 때 걸림돌이 되므로 신중하게 판단한다
+- 스키마 분리는 소유권을 표현할 뿐이며, 확실히 막으려면 계정과 권한을 나눈다
+
+---
+
+#### 📕 Reference
+
+- Sam Newman, 『Monolith to Microservices』, Chapter 4 "Decomposing the Database"
+- Vaughn Vernon, 『Implementing Domain-Driven Design』, Chapter 10 "Aggregates" (Rule: Reference Other Aggregates by Identity)
+- Chris Richardson, microservices.io, [Pattern: Database per service](https://microservices.io/patterns/data/database-per-service.html)
+- Chris Richardson, microservices.io, [Pattern: Shared database](https://microservices.io/patterns/data/shared-database.html)
+- PostgreSQL Documentation, [Schemas](https://www.postgresql.org/docs/current/ddl-schemas.html), [Privileges](https://www.postgresql.org/docs/current/ddl-priv.html)

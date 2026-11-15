@@ -117,7 +117,7 @@ ConsoleLogger.log("시작")    // [LOG] 시작
 
 ### 2.4 주의: 상태를 가진 object는 전역 변수다
 
-`object`는 어디서든 접근할 수 있으므로, 앞의 `Counter`처럼 `var`를 가지면 프로그램 전체가 공유하는 가변 상태가 됩니다. 누가 언제 값을 바꿨는지 추적하기 어려워집니다. ([불변 객체 글](/blog/programming_concept/immutable_object)의 "공유된 가변 상태" 참고)
+`object`는 어디서든 접근할 수 있으므로, 앞의 `Counter`처럼 `var`를 가지면 프로그램 전체가 공유하는 가변 상태가 됩니다. 누가 언제 값을 바꿨는지 추적하기 어려워집니다. ([불변 객체 글](/blog/groups/cs/programming_concept/immutable_object)의 "공유된 가변 상태" 참고)
 
 `object`는 상태가 없는 기능 모음(`Delegates` 등)이나 변하지 않는 값을 담는 용도로 쓰는 것이 안전합니다.
 

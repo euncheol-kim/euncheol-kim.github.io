@@ -31,5 +31,6 @@ export const CATEGORY_PUBLIC_NAMES: Record<string, string> = {
   design_pattern: 'design pattern',
   fast_api: 'Fast API',
   hirecore: 'HireCore',
+  programming_concept: 'Programming Language',
   skill_sheet: 'skill sheet',
 };
