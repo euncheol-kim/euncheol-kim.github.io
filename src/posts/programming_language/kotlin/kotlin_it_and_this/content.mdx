@@ -1,0 +1,212 @@
+---
+title: "Kotlin의 it과 this: 블록 안에서 객체를 부르는 두 이름"
+desc: "it은 람다가 받은 하나뿐인 인자에 자동으로 붙는 이름이고, this는 지금 코드가 속해 있는 객체입니다. 두 이름이 각각 어디서 오는지, 어떤 람다에서 this가 바뀌는지, 여러 개가 겹칠 때 어떻게 구분하는지 코드로 정리합니다."
+date: 2026-11-17 16:14
+thumbnail: ./thumbnail.webp
+isHot: false
+isVisible: true
+tags: Kotlin, it, this, Lambda, Receiver
+---
+
+### 🌱 포스팅 작성 이유
+
+Kotlin의 중괄호 블록 안에서는 `it`과 `this`가 자주 나옵니다. 어떤 블록에서는 `it.name`이라고 쓰고, 어떤 블록에서는 `this.name` 또는 그냥 `name`이라고 씁니다. 두 이름이 각각 무엇을 가리키는지, 왜 블록마다 쓰는 이름이 다른지 정리합니다.
+
+---
+
+## 1. 먼저 결론
+
+| 이름 | 가리키는 것 | 생략 | 이름 변경 |
+| --- | --- | --- | --- |
+| `it` | 람다가 **인자로 받은 값** | 불가능 | 가능 |
+| `this` | 지금 코드가 **속해 있는 객체** | 가능 | 불가능 |
+
+`it`은 밖에서 건네받은 값이고, `this`는 코드가 서 있는 자리의 주인입니다. 건네받은 값은 이름을 불러야 쓸 수 있지만, 자기 자신의 것은 이름 없이도 쓸 수 있습니다. 이 차이가 생략 가능 여부로 이어집니다.
+
+---
+
+## 2. it — 람다의 하나뿐인 파라미터
+
+### 2.1 it은 생략된 파라미터의 이름이다
+
+람다는 파라미터를 받아 값을 돌려주는 코드 블록입니다. 파라미터는 `->` 앞에 적습니다.
+
+```kotlin
+val numbers = listOf(1, 2, 3, 4)
+
+numbers.filter { number -> number > 2 }     // [3, 4]
+```
+
+파라미터가 **하나뿐**이면 이름과 `->`를 생략할 수 있습니다. 이때 Kotlin이 그 파라미터에 자동으로 붙여 주는 이름이 `it`입니다.
+
+```kotlin
+numbers.filter { it > 2 }                   // [3, 4]
+```
+
+두 코드는 완전히 같습니다. `it`은 특별한 객체가 아니라 **이름을 적지 않은 파라미터**입니다.
+
+### 2.2 it을 쓸 수 없는 경우
+
+파라미터가 둘 이상이면 어느 쪽이 `it`인지 정할 수 없으므로 이름을 직접 적어야 합니다.
+
+```kotlin
+val scores = mapOf("Alice" to 90, "Bob" to 75)
+
+scores.forEach { name, score -> println("$name: $score") }
+```
+
+### 2.3 it에 이름을 붙이는 편이 나은 경우
+
+람다 안에 람다가 들어가면 `it`이 두 개가 됩니다. 안쪽 `it`이 바깥쪽 `it`을 가려서 읽기 어려워집니다.
+
+```kotlin
+val teams = listOf(listOf("Alice", "Bob"), listOf("Carol"))
+
+teams.forEach {
+    it.forEach {
+        println(it)         // 안쪽 it: 이름 하나. 바깥 it(팀)은 가려졌다
+    }
+}
+```
+
+이럴 때는 이름을 붙입니다.
+
+```kotlin
+teams.forEach { team ->
+    team.forEach { member ->
+        println("${team.size}명 팀의 $member")
+    }
+}
+```
+
+---
+
+## 3. this — 지금 코드가 속해 있는 객체
+
+### 3.1 클래스 안에서
+
+클래스의 멤버 함수 안에서 `this`는 그 함수가 호출된 객체입니다. 자기 자신의 멤버를 쓰는 것이므로 `this`는 생략할 수 있습니다.
+
+```kotlin
+class User(val name: String) {
+    fun greet() {
+        println("안녕하세요, ${this.name}입니다")
+        println("안녕하세요, ${name}입니다")       // this 생략 — 같은 코드
+    }
+}
+```
+
+### 3.2 확장 함수 안에서
+
+확장 함수 안에서 `this`는 **점(`.`) 왼쪽에 있는 객체**입니다. 이 객체를 **수신 객체(Receiver)** 라고 부릅니다.
+
+```kotlin
+fun String.shout(): String {
+    return this.uppercase() + "!"
+}
+
+"hello".shout()             // "HELLO!" — this는 "hello"
+```
+
+여기서도 `this`를 생략해 `uppercase() + "!"`라고 쓸 수 있습니다.
+
+---
+
+## 4. 람다 안에서 this는 누구인가
+
+람다 안의 `this`는 람다의 종류에 따라 달라집니다.
+
+### 4.1 일반 람다는 this를 바꾸지 않는다
+
+일반 람다 안에서 `this`는 **람다 바깥의 `this`와 같습니다.** 람다는 값을 인자(`it`)로 받을 뿐, 코드가 속한 객체를 바꾸지 않습니다.
+
+```kotlin
+class Team(val name: String) {
+    val members = listOf("Alice", "Bob")
+
+    fun printAll() {
+        members.forEach {
+            println("${this.name}: $it")    // this는 Team, it은 멤버 이름
+        }
+    }
+}
+```
+
+### 4.2 수신 객체 지정 람다는 this를 바꾼다
+
+블록 안의 `this`를 특정 객체로 **바꿔 주는** 람다가 있습니다. 이를 **수신 객체 지정 람다(Lambda with Receiver)** 라고 합니다. `apply`가 받는 블록이 여기에 해당합니다.
+
+```kotlin
+val sb = StringBuilder()
+
+sb.apply {
+    append("Hello")         // this.append("Hello") — this는 sb
+    append(", Kotlin")
+}
+```
+
+블록 안이 `StringBuilder`의 멤버 함수 안인 것처럼 동작합니다. 그래서 `append`를 이름만으로 호출할 수 있습니다.
+
+### 4.3 차이는 함수 타입에서 온다
+
+어떤 블록이 `it`을 쓰고 어떤 블록이 `this`를 쓰는지는 그 블록을 받는 함수가 정합니다. `let`과 `apply`의 선언을 단순화하면 다음과 같습니다.
+
+```kotlin
+fun <T, R> T.let(block: (T) -> R): R        // 객체를 인자로 넘긴다 → it
+fun <T> T.apply(block: T.() -> Unit): T     // 객체를 수신 객체로 삼는다 → this
+```
+
+| 블록의 타입 | 객체가 전달되는 방식 | 블록 안에서 부르는 이름 |
+| --- | --- | --- |
+| `(T) -> R` | 괄호 안의 **인자**로 | `it` |
+| `T.() -> R` | 점 왼쪽의 **수신 객체**로 | `this` |
+
+`T.()`처럼 타입 뒤에 점이 붙어 있으면 "이 블록은 `T`의 확장 함수처럼 실행된다"는 뜻입니다. 확장 함수 안에서 `this`가 점 왼쪽 객체였던 것과 같은 원리입니다.
+
+`let`, `run`, `with`, `apply`, `also`가 `it`과 `this` 중 무엇을 쓰는지도 이 타입 차이로 정해집니다. 다섯 함수의 구분은 [Kotlin 스코프 함수: let, run, with, apply, also 구분하기](/blog/groups/programming_language/kotlin/kotlin_scope_functions)에서 정리했습니다.
+
+---
+
+## 5. this가 여러 개 겹칠 때: this@이름
+
+클래스 안에서 수신 객체 지정 람다를 쓰면 `this`의 후보가 둘이 됩니다. 이름 없이 쓴 `this`는 **가장 안쪽**을 가리킵니다.
+
+```kotlin
+class Report(val title: String) {
+    fun build(): String {
+        return StringBuilder().apply {
+            append(this@Report.title)       // 바깥 this: Report
+            append(" (")
+            append(this.length)             // 안쪽 this: StringBuilder
+            append("자)")
+        }.toString()
+    }
+}
+```
+
+바깥 객체를 가리키려면 `this@클래스이름`처럼 **`@` 뒤에 이름**을 붙입니다. 안쪽을 분명히 하고 싶을 때는 `this@apply`처럼 함수 이름을 붙일 수도 있습니다.
+
+`this`를 생략했을 때도 같은 순서로 찾습니다. 안쪽 객체에 그 이름의 멤버가 있으면 안쪽 것이 선택되고, 없으면 바깥 객체에서 찾습니다. 양쪽에 같은 이름의 멤버가 있다면 `this@이름`으로 어느 쪽인지 적어 주는 것이 안전합니다.
+
+---
+
+## 6. 마무리
+
+**`it`은 람다가 받은 인자의 이름이고, `this`는 코드가 속한 객체입니다.**
+
+| | `it` | `this` |
+| --- | --- | --- |
+| 정체 | 하나뿐인 람다 파라미터의 기본 이름 | 현재 객체 또는 수신 객체 |
+| 쓸 수 있는 곳 | 파라미터가 하나인 람다 | 클래스, 확장 함수, 수신 객체 지정 람다 |
+| 생략 | 불가능 | 가능 |
+| 이름 변경 | `{ user -> ... }` | 불가능 |
+| 겹쳤을 때 | 이름을 붙여 구분 | `this@이름`으로 구분 |
+
+블록 안에서 멤버가 이름만으로 호출되고 있으면 `this`가 바뀐 블록이고, `it.`으로 시작하면 인자를 받은 블록입니다.
+
+---
+
+#### 📕 Reference
+
+- Kotlin 공식 문서, [This expressions](https://kotlinlang.org/docs/this-expressions.html)
+- Kotlin 공식 문서, [Higher-order functions and lambdas](https://kotlinlang.org/docs/lambdas.html) — "it: implicit name of a single parameter", "Function literals with receiver"
