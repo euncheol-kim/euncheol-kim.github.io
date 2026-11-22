@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { usePathname } from 'next/navigation';
 
+import { BlogIntro } from '@/components/graph/BlogIntro';
 import { PostGraph as PostGraphData } from '@/config/types';
 import { cn } from '@/lib/utils';
 import { ChevronLeft, Waypoints, X } from 'lucide-react';
@@ -22,6 +23,8 @@ export const GraphDrawer = ({ graph }: { graph: PostGraphData }) => {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(true);
   const [hasOpened, setHasOpened] = useState(false);
+  // 처음 들어왔을 때 소개 글부터 보이도록 올라온 상태로 시작한다.
+  const [isIntroOpen, setIsIntroOpen] = useState(true);
   const isBlog = pathname.startsWith('/blog');
 
   // 글 본문에서 열면 읽고 있는 글을 선택해 둔다.
@@ -40,12 +43,15 @@ export const GraphDrawer = ({ graph }: { graph: PostGraphData }) => {
 
   useEffect(() => {
     if (!isOpen) return;
+    // 소개 글이 올라와 있으면 그것부터 내린다.
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setIsOpen(false);
+      if (e.key !== 'Escape') return;
+      if (isIntroOpen) setIsIntroOpen(false);
+      else setIsOpen(false);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [isOpen]);
+  }, [isOpen, isIntroOpen]);
 
   // 본문이 패널과 손잡이를 피해 밀려나도록 html에 상태를 남긴다. (graph-open, graph-closed variant)
   // 첫 화면에서 본문이 뒤늦게 밀리지 않도록 layout.tsx의 html에도 같은 표시가 미리 들어 있다.
@@ -78,7 +84,7 @@ export const GraphDrawer = ({ graph }: { graph: PostGraphData }) => {
       <aside
         aria-hidden={!isOpen}
         className={cn(
-          'fixed inset-y-0 left-0 z-50 border-r bg-card shadow-2xl transition-[transform,visibility] duration-300 dark:border-slate-700',
+          'fixed inset-y-0 left-0 z-50 overflow-hidden border-r bg-card pb-10 shadow-2xl transition-[transform,visibility] duration-300 dark:border-slate-700',
           DRAWER_WIDTH_CLASS,
           isOpen ? 'visible translate-x-0' : 'invisible -translate-x-full'
         )}
@@ -94,6 +100,7 @@ export const GraphDrawer = ({ graph }: { graph: PostGraphData }) => {
         >
           <X className='size-4' />
         </button>
+        <BlogIntro isOpen={isIntroOpen} onToggle={() => setIsIntroOpen(!isIntroOpen)} />
       </aside>
     </div>
   );
