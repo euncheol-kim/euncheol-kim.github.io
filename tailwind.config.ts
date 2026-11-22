@@ -1,4 +1,5 @@
 import type { Config } from 'tailwindcss';
+import plugin from 'tailwindcss/plugin';
 
 const config = {
   darkMode: ['class'],
@@ -226,6 +227,13 @@ const config = {
           },
         },
       },
+      // 그래프 패널 폭. 화면의 38.2%(황금비의 작은 쪽)로 잡되 440~640px 사이로 제한한다.
+      // graph-handle은 손잡이가 차지하는 폭, graph-open은 패널이 열렸을 때 본문이 비켜나는 폭이다.
+      spacing: {
+        graph: 'clamp(440px, 38.2vw, 640px)',
+        'graph-handle': '2.75rem',
+        'graph-open': 'calc(clamp(440px, 38.2vw, 640px) + 2.75rem)',
+      },
       borderRadius: {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
@@ -247,7 +255,15 @@ const config = {
       },
     },
   },
-  plugins: [require('tailwindcss-animate'), require('@tailwindcss/typography')],
+  plugins: [
+    require('tailwindcss-animate'),
+    require('@tailwindcss/typography'),
+    // 그래프 패널이 열려 있을 때/접혀 있을 때만 적용되는 variant. 패널은 lg부터 보이므로 같은 조건을 건다.
+    plugin(({ addVariant }) => {
+      addVariant('graph-open', '@media (min-width: 1024px) { :root[data-graph=open] & }');
+      addVariant('graph-closed', '@media (min-width: 1024px) { :root[data-graph=closed] & }');
+    }),
+  ],
 } satisfies Config;
 
 export default config;

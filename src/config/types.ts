@@ -73,7 +73,7 @@ export interface GraphLink {
 export interface PostGraph {
   nodes: GraphNode[];
   links: GraphLink[];
-  groups: { id: string; label: string }[]; // 상위 카테고리. 화면에서 점들을 감싸는 영역이 된다
+  groups: { id: string; label: string; url: string }[]; // 상위 카테고리. 화면에서 점들을 감싸는 영역이 된다
 }
 
 export interface HeadingItem {

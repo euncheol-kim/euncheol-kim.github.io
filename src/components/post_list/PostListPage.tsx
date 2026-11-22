@@ -39,7 +39,8 @@ const PostListPage = async ({ category, group, postList, className, ...props  }:
           {postList.length === 0 && (
             <p className='py-16 text-center text-sm text-muted-foreground'>아직 작성된 글이 없습니다.</p>
           )}
-          <ul className='grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 md:grid-cols-3 lg:gap-6'>
+          {/* 그래프 패널이 열리면 남는 폭이 좁아지므로 xl 전까지는 2열로 줄인다. */}
+          <ul className='grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 md:grid-cols-3 lg:gap-6 graph-open:max-xl:grid-cols-2'>
             {postList.map((post) => (
               <PostCard key={post.url + post.date} post={post} />
             ))}

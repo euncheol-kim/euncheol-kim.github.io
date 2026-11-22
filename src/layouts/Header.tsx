@@ -30,7 +30,7 @@ export const Header = () => {
     <nav
       style={{ marginTop }}
       ref={ref}
-      className='fixed z-40 flex w-full flex-col items-center justify-center border-b bg-background shadow-sm print:hidden'
+      className='fixed left-0 z-40 flex w-full flex-col items-center justify-center border-b bg-background shadow-sm transition-[padding] duration-300 graph-closed:pl-graph-handle graph-open:pl-graph-open print:hidden'
     >
       <div className='mt-1 flex h-[40px] w-full max-w-[1200px] items-center justify-between px-4 max-sm:pb-1 sm:h-[48px]'>
         <div className='flex items-center font-medium'>

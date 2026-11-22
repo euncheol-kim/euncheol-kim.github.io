@@ -1,5 +1,5 @@
 import { GraphLink, GraphNode, PostGraph } from '@/config/types';
-import { getCategoryGroupPublicName, getCategoryUrl, getSortedPostList } from '@/lib/post';
+import { getCategoryGroupPublicName, getCategoryUrl, getGroupUrl, getSortedPostList } from '@/lib/post';
 
 // 본문에서 다른 글로 건 링크 : [텍스트](/blog/groups/{group}/{category}/{slug}) 또는 href="..."
 const POST_LINK_REGEX =
@@ -64,6 +64,7 @@ export const getPostGraph = async (): Promise<PostGraph> => {
   const groups = Array.from(new Set(groupOfCategory.values()), (groupPath) => ({
     id: groupIdOf(groupPath),
     label: getCategoryGroupPublicName(groupPath),
+    url: getGroupUrl(groupPath),
   }));
 
   return { nodes, links, groups };

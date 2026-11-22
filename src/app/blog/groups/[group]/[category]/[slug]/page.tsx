@@ -5,7 +5,6 @@ import Giscus from '@/components/post_detail/Giscus';
 import { PostBody } from '@/components/post_detail/PostBody';
 import { PostHeader } from '@/components/post_detail/PostHeader';
 import TocSidebar from '@/components/post_detail/TableOfContentSidebar';
-import TocTop from '@/components/post_detail/TableOfContentTop';
 import { baseDomain } from '@/config/const';
 import { getPostDetail, getPostList, parseToc } from '@/lib/post';
 
@@ -52,9 +51,9 @@ const PostDetail = async ({ params: { group, category, slug } }: Props) => {
   const toc = parseToc(post.content);
   return (
     // lg부터 본문을 900px로 넓힌다. xl에서는 오른쪽 목차 위치를 유지하도록 늘어난 폭만큼 왼쪽으로 옮긴다.
-    <div className='prose mx-auto w-full max-w-[750px] px-5 dark:prose-invert sm:px-6 lg:max-w-[900px] xl:relative xl:right-[75px]'>
+    // 그래프 패널이 열려 오른쪽 목차를 둘 자리가 없으면(1964px 미만) 본문을 다시 가운데에 둔다.
+    <div className='prose mx-auto w-full max-w-[750px] px-5 dark:prose-invert sm:px-6 lg:max-w-[900px] xl:relative xl:right-[75px] graph-open:max-[1963px]:right-0'>
       <PostHeader post={post} />
-      <TocTop toc={toc} />
       <article className='relative'>
         <TocSidebar toc={toc} />
         <PostBody post={post} />

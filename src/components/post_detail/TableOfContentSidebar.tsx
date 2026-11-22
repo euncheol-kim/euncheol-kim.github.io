@@ -31,8 +31,8 @@ const TableOfContent = ({ toc }: Props) => {
   }, [activeId]);
 
   return (
-    <aside className='not-prose absolute -top-[200px] left-full -mb-[100px] hidden h-[calc(100%+150px)] xl:block '>
-      <div className='sticky bottom-0 top-[80px] z-10 ml-[5rem] mt-[200px] w-[320px] 2xl:w-[440px]'>
+    <aside className='not-prose absolute -top-[200px] left-full -mb-[100px] hidden h-[calc(100%+150px)] xl:block graph-open:max-[1963px]:hidden'>
+      <div className='sticky bottom-0 top-[80px] z-10 ml-[5rem] mt-[200px] w-[320px] 2xl:w-[440px] graph-open:max-[2219px]:w-[320px]'>
         <div className='mb-4 border-l px-4 py-2'>
           <div className='mb-1 font-bold'>On this page</div>
           <ul ref={listRef} className='relative max-h-[calc(100vh-200px)] overflow-y-auto pr-2 text-xs'>

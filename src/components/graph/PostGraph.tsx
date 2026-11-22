@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
-import { GraphLinkType, GraphNode, GraphNodeType, PostGraph as PostGraphData } from '@/config/types';
+import { GraphLinkType, GraphNode, PostGraph as PostGraphData } from '@/config/types';
 import { cn } from '@/lib/utils';
 import {
   ArrowRight,
@@ -13,6 +14,7 @@ import {
   Maximize2,
   Minus,
   Plus,
+  RotateCcw,
   Search,
   X,
 } from 'lucide-react';
@@ -92,14 +94,16 @@ interface Props {
 
 const PostGraph = ({ graph, focusId: initialFocusId, isActive, className }: Props) => {
   const { resolvedTheme } = useTheme();
+  const router = useRouter();
   const colors = resolvedTheme === 'dark' ? PALETTE.dark : PALETTE.light;
 
   const containerRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<ForceGraphMethods<SimNode, SimLink>>();
   const hasFitted = useRef(false);
+  // 마지막으로 그린 영역 이름표의 자리. 이름표를 눌러도 영역이 선택되게 한다.
+  const regionLabelBoxes = useRef<{ id: string; left: number; top: number; right: number; bottom: number }[]>([]);
 
   const [size, setSize] = useState({ width: 0, height: 0 });
-  const [showCategory, setShowCategory] = useState(true);
   const [hovered, setHovered] = useState<SimNode | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -115,41 +119,26 @@ const PostGraph = ({ graph, focusId: initialFocusId, isActive, className }: Prop
     () => new Map(graph.groups.map((group) => [group.id, group.label])),
     [graph]
   );
+  const groupIds = useMemo(() => new Set(graph.groups.map((group) => group.id)), [graph]);
 
-  const isTypeVisible = useCallback(
-    (type: GraphNodeType | GraphLinkType) => type === 'post' || type === 'link' || showCategory,
-    [showCategory]
-  );
-
-  const visibleLinks = useMemo(
-    () => graph.links.filter((link) => isTypeVisible(link.type)),
-    [graph, isTypeVisible]
-  );
-
-  // 숨긴 카테고리도 배치 계산에는 계속 넣는다. 화면에만 그리지 않으므로,
-  // 켜고 끌 때 글들이 흩어지지 않고 같은 카테고리끼리 모인 자리를 유지한다.
   const data = useMemo(
     () => ({ nodes: allNodes, links: graph.links.map((link): SimLink => ({ ...link })) }),
     [allNodes, graph]
   );
-  const visibleNodes = useMemo(
-    () => allNodes.filter((node) => isTypeVisible(node.type)),
-    [allNodes, isTypeVisible]
-  );
 
-  // 화면에 보이는 선 기준의 이웃. 강조와 이름표 표시에 쓴다.
+  // 선으로 이어진 이웃. 강조와 이름표 표시에 쓴다.
   const neighbors = useMemo(() => {
     const map = new Map<string, Set<string>>();
     const add = (from: string, to: string) => {
       if (!map.has(from)) map.set(from, new Set());
       map.get(from)!.add(to);
     };
-    visibleLinks.forEach((link) => {
+    graph.links.forEach((link) => {
       add(link.source, link.target);
       add(link.target, link.source);
     });
     return map;
-  }, [visibleLinks]);
+  }, [graph]);
 
   // 점의 크기 : 글은 다른 글과 링크로 많이 이어질수록, 카테고리는 속한 글이 많을수록 크다.
   const radiusOf = useMemo(() => {
@@ -174,20 +163,23 @@ const PostGraph = ({ graph, focusId: initialFocusId, isActive, className }: Prop
     const keyword = query.trim().toLowerCase();
     if (!keyword) return null;
     return new Set(
-      visibleNodes
+      allNodes
         .filter((node) => node.label.toLowerCase().includes(keyword))
         .map((node) => node.id)
     );
-  }, [visibleNodes, query]);
+  }, [allNodes, query]);
 
-  // 강조의 기준 : 마우스를 올린 점 > 선택한 점 > 검색어
+  // 강조의 기준 : 마우스를 올린 점 > 선택한 점이나 영역 > 검색어
   const focusId = hovered?.id ?? selectedId;
+  // 영역(상위 카테고리)을 골랐을 때는 그 안의 점 전체를 강조한다.
+  const focusGroupId = focusId && groupIds.has(focusId) ? focusId : null;
   const isHighlighted = useCallback(
     (id: string) => {
+      if (focusGroupId) return nodeOf.get(id)?.group === focusGroupId;
       if (focusId) return id === focusId || !!neighbors.get(focusId)?.has(id);
       return matched ? matched.has(id) : true;
     },
-    [focusId, neighbors, matched]
+    [focusId, focusGroupId, nodeOf, neighbors, matched]
   );
 
   useEffect(() => {
@@ -261,17 +253,22 @@ const PostGraph = ({ graph, focusId: initialFocusId, isActive, className }: Prop
   const select = useCallback(
     (id: string | null, duration = 500) => {
       setSelectedId(id);
-      const node = id ? nodeOf.get(id) : undefined;
-      if (!node) return;
-      if (node.type === 'category') setShowCategory(true);
       const fg = graphRef.current;
-      if (!fg || node.x === undefined || node.y === undefined) return;
-      // 고른 점과 이어진 점들이 정보 패널에 가려지지 않는 영역에 모두 들어오도록 옮기고 확대한다.
+      if (!fg || !id) return;
+      // 고른 점과 이어진 점들, 그리고 그 점이 속한 영역(상위 카테고리)의 원 전체가 정보 패널에
+      // 가려지지 않는 자리에 모두 들어오도록 옮기고 확대한다. 영역을 골랐다면 그 원이 기준이다.
       // 패널은 넓은 화면에서 오른쪽, 좁은 화면에서 아래에 뜬다.
-      const shown = [node, ...Array.from(neighbors.get(node.id) ?? [], (other) => nodeOf.get(other))]
-        .filter((item): item is SimNode => item?.x !== undefined && item?.y !== undefined);
-      const xs = shown.map((item) => item.x!);
-      const ys = shown.map((item) => item.y!);
+      const node = nodeOf.get(id);
+      if (node && (node.x === undefined || node.y === undefined)) return;
+      const region = regionsOf(allNodes).find((item) => item.id === (node ? node.group : id));
+      const shown = node
+        ? [node, ...Array.from(neighbors.get(node.id) ?? [], (other) => nodeOf.get(other))].filter(
+            (item): item is SimNode => item?.x !== undefined && item?.y !== undefined
+          )
+        : [];
+      if (!region && shown.length === 0) return;
+      const xs = [...shown.map((item) => item.x!), ...(region ? [region.x - region.radius, region.x + region.radius] : [])];
+      const ys = [...shown.map((item) => item.y!), ...(region ? [region.y - region.radius, region.y + region.radius] : [])];
       const [left, right, top, bottom] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
       const freeWidth = size.width - (isWide ? PANEL_WIDTH : 0) - FOCUS_MARGIN * 2;
       const freeHeight = size.height * (isWide ? 1 : 1 - PANEL_HEIGHT_RATIO) - FOCUS_MARGIN * 2;
@@ -285,7 +282,7 @@ const PostGraph = ({ graph, focusId: initialFocusId, isActive, className }: Prop
       fg.centerAt((left + right) / 2 + shiftX, (top + bottom) / 2 + shiftY, duration);
       fg.zoom(zoom, duration);
     },
-    [nodeOf, neighbors, size, isWide]
+    [allNodes, nodeOf, neighbors, size, isWide]
   );
 
   // 열릴 때마다 읽고 있는 글을 선택해 보여 준다. 처음 열 때는 배치가 끝난 뒤(onEngineStop)에 처리한다.
@@ -297,7 +294,7 @@ const PostGraph = ({ graph, focusId: initialFocusId, isActive, className }: Prop
 
   const drawNode = useCallback(
     (node: SimNode, ctx: CanvasRenderingContext2D, globalScale: number) => {
-      if (node.x === undefined || node.y === undefined || !isTypeVisible(node.type)) return;
+      if (node.x === undefined || node.y === undefined) return;
       const radius = radiusOf(node);
 
       ctx.globalAlpha = isHighlighted(node.id) ? 1 : DIMMED_ALPHA;
@@ -322,13 +319,12 @@ const PostGraph = ({ graph, focusId: initialFocusId, isActive, className }: Prop
 
       ctx.globalAlpha = 1;
     },
-    [colors, isHighlighted, isTypeVisible, radiusOf, selectedId]
+    [colors, isHighlighted, radiusOf, selectedId]
   );
 
   // 상위 카테고리에 속한 점들을 옅은 원으로 감싸, 흩어진 묶음이 한 덩어리로 읽히게 한다.
   const drawRegions = useCallback(
     (ctx: CanvasRenderingContext2D, globalScale: number) => {
-      if (!showCategory) return;
       regionsOf(allNodes).forEach((region) => {
         const isDimmed = !!focusId && !region.members.some((node) => isHighlighted(node.id));
         ctx.globalAlpha = isDimmed ? 0.3 : 1;
@@ -336,14 +332,16 @@ const PostGraph = ({ graph, focusId: initialFocusId, isActive, className }: Prop
         ctx.arc(region.x, region.y, region.radius, 0, 2 * Math.PI);
         ctx.fillStyle = colors.region;
         ctx.fill();
-        ctx.lineWidth = 1 / globalScale;
-        ctx.strokeStyle = colors.regionEdge;
+        // 고른 영역은 테두리를 진하게 그려 구분한다.
+        const isSelected = region.id === selectedId;
+        ctx.lineWidth = (isSelected ? 1.5 : 1) / globalScale;
+        ctx.strokeStyle = isSelected ? colors.text : colors.regionEdge;
         ctx.stroke();
 
         ctx.globalAlpha = 1;
       });
     },
-    [allNodes, colors, focusId, isHighlighted, showCategory]
+    [allNodes, colors, focusId, isHighlighted, selectedId]
   );
 
   // 이름표는 모든 점을 그린 뒤 한꺼번에 그린다. 중요한 것부터 자리를 잡고,
@@ -354,7 +352,7 @@ const PostGraph = ({ graph, focusId: initialFocusId, isActive, className }: Prop
       const overlaps = (a: Box, b: Box) =>
         a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
 
-      const placed = visibleNodes.filter((node) => node.x !== undefined && node.y !== undefined);
+      const placed = allNodes.filter((node) => node.x !== undefined && node.y !== undefined);
       // 강조 중인 점 > 카테고리와 태그 > 큰 글(연결이 많은 글) 순으로 자리를 준다.
       const rankOf = (node: SimNode) =>
         node.id === focusId ? 0 : node.type === 'post' ? 100 - radiusOf(node) : 1;
@@ -379,37 +377,38 @@ const PostGraph = ({ graph, focusId: initialFocusId, isActive, className }: Prop
       });
 
       // 상위 카테고리의 이름은 영역 위쪽 테두리에 걸친 이름표로 그린다. 선과 점 위에 놓여 가려지지 않는다.
-      if (showCategory) {
-        const fontSize = 13 / globalScale;
-        const paddingX = 9 / globalScale;
-        const height = fontSize + 9 / globalScale;
-        ctx.font = `700 ${fontSize}px Pretendard, sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        regionsOf(allNodes).forEach((region) => {
-          const label = groupLabelOf.get(region.id);
-          if (!label) return;
-          const halfWidth = ctx.measureText(label).width / 2 + paddingX;
-          const centerY = region.y - region.radius;
-          const isDimmed = !!focusId && !region.members.some((node) => isHighlighted(node.id));
+      const fontSize = 13 / globalScale;
+      const paddingX = 9 / globalScale;
+      const height = fontSize + 9 / globalScale;
+      ctx.font = `700 ${fontSize}px Pretendard, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      regionLabelBoxes.current = [];
+      regionsOf(allNodes).forEach((region) => {
+        const label = groupLabelOf.get(region.id);
+        if (!label) return;
+        const halfWidth = ctx.measureText(label).width / 2 + paddingX;
+        const centerY = region.y - region.radius;
+        const isDimmed = !!focusId && !region.members.some((node) => isHighlighted(node.id));
 
-          ctx.globalAlpha = isDimmed ? 0.3 : 1;
-          ctx.beginPath();
-          ctx.roundRect(region.x - halfWidth, centerY - height / 2, halfWidth * 2, height, height / 2);
-          ctx.fillStyle = colors.text;
-          ctx.fill();
-          ctx.fillStyle = colors.surface;
-          ctx.fillText(label, region.x, centerY + 0.5 / globalScale);
-          ctx.globalAlpha = 1;
+        ctx.globalAlpha = isDimmed ? 0.3 : 1;
+        ctx.beginPath();
+        ctx.roundRect(region.x - halfWidth, centerY - height / 2, halfWidth * 2, height, height / 2);
+        ctx.fillStyle = colors.text;
+        ctx.fill();
+        ctx.fillStyle = colors.surface;
+        ctx.fillText(label, region.x, centerY + 0.5 / globalScale);
+        ctx.globalAlpha = 1;
 
-          taken.push({
-            left: region.x - halfWidth,
-            top: centerY - height / 2,
-            right: region.x + halfWidth,
-            bottom: centerY + height / 2,
-          });
-        });
-      }
+        const labelBox = {
+          left: region.x - halfWidth,
+          top: centerY - height / 2,
+          right: region.x + halfWidth,
+          bottom: centerY + height / 2,
+        };
+        taken.push(labelBox);
+        regionLabelBoxes.current.push({ id: region.id, ...labelBox });
+      });
 
       const gap = 3 / globalScale;
       ctx.textAlign = 'center';
@@ -451,45 +450,44 @@ const PostGraph = ({ graph, focusId: initialFocusId, isActive, className }: Prop
         ctx.fillText(label, node.x!, box.top);
       });
     },
-    [allNodes, groupLabelOf, colors, visibleNodes, focusId, matched, isHighlighted, radiusOf, showCategory]
+    [allNodes, groupLabelOf, colors, focusId, matched, isHighlighted, radiusOf]
   );
 
   // 실제 점보다 넓은 영역에서 마우스와 터치를 인식하도록 한다.
   const paintPointerArea = useCallback(
     (node: SimNode, color: string, ctx: CanvasRenderingContext2D) => {
-      if (node.x === undefined || node.y === undefined || !isTypeVisible(node.type)) return;
+      if (node.x === undefined || node.y === undefined) return;
       ctx.fillStyle = color;
       ctx.beginPath();
       ctx.arc(node.x, node.y, radiusOf(node) + 5, 0, 2 * Math.PI);
       ctx.fill();
     },
-    [radiusOf, isTypeVisible]
+    [radiusOf]
   );
 
   const isLinkHighlighted = useCallback(
     (link: SimLink) => {
       const source = nodeIdOf(link.source);
       const target = nodeIdOf(link.target);
+      if (focusGroupId) return isHighlighted(source) && isHighlighted(target);
       if (focusId) return source === focusId || target === focusId;
       return matched ? matched.has(source) && matched.has(target) : true;
     },
-    [focusId, matched]
+    [focusId, focusGroupId, isHighlighted, matched]
   );
 
   // 가장자리의 이름표가 잘리지 않도록 여백을 두고 전체가 보이게 맞춘다.
   // 전체가 화면에 꽉 차게 맞춘다. 점뿐 아니라 영역의 원과 위쪽 이름표까지 들어오도록 직접 계산한다.
   const fitView = (duration = 400) => {
     const fg = graphRef.current;
-    const placed = visibleNodes.filter((node) => node.x !== undefined && node.y !== undefined);
+    const placed = allNodes.filter((node) => node.x !== undefined && node.y !== undefined);
     if (!fg || placed.length === 0) return;
-    const boxes = showCategory
-      ? regionsOf(allNodes).map((region) => ({
-          left: region.x - region.radius,
-          right: region.x + region.radius,
-          top: region.y - region.radius,
-          bottom: region.y + region.radius,
-        }))
-      : placed.map((node) => ({ left: node.x!, right: node.x!, top: node.y!, bottom: node.y! }));
+    const boxes = regionsOf(allNodes).map((region) => ({
+      left: region.x - region.radius,
+      right: region.x + region.radius,
+      top: region.y - region.radius,
+      bottom: region.y + region.radius,
+    }));
     const left = Math.min(...boxes.map((box) => box.left));
     const right = Math.max(...boxes.map((box) => box.right));
     const top = Math.min(...boxes.map((box) => box.top));
@@ -502,12 +500,41 @@ const PostGraph = ({ graph, focusId: initialFocusId, isActive, className }: Prop
     fg.zoom(zoom, duration);
   };
 
+  // 확대·이동·선택·검색을 모두 되돌려 처음 열었을 때의 화면으로 돌아간다.
+  // 글 본문에서는 읽고 있는 글을 고른 상태가, 그 밖에서는 전체 보기가 처음 화면이다.
+  const resetView = () => {
+    setQuery('');
+    if (initialFocusId) return select(initialFocusId);
+    setSelectedId(null);
+    fitView();
+  };
+
   const zoomBy = (ratio: number) => {
     const fg = graphRef.current;
     if (fg) fg.zoom(fg.zoom() * ratio, 250);
   };
 
+  // 점이 아닌 곳을 눌렀을 때 : 영역(큰 원)이나 그 이름표 안이면 그 영역을 고르고, 바깥이면 선택을 푼다.
+  const selectRegionAt = (event: MouseEvent) => {
+    const fg = graphRef.current;
+    if (!fg) return;
+    const { x, y } = fg.screen2GraphCoords(event.offsetX, event.offsetY);
+    const hit =
+      regionLabelBoxes.current.find(
+        (box) => x >= box.left && x <= box.right && y >= box.top && y <= box.bottom
+      ) ?? regionsOf(allNodes).find((region) => Math.hypot(x - region.x, y - region.y) <= region.radius);
+    const picked = hit && hit.id !== selectedId ? hit.id : null;
+    select(picked);
+    // 목록 화면에서는 본문의 카테고리 탭도 고른 영역으로 바꾼다. 글을 읽는 중에는 화면을 옮기지 않는다.
+    const group = graph.groups.find((item) => item.id === picked);
+    if (group && !initialFocusId) router.push(group.url, { scroll: false });
+  };
+
   const selected = selectedId ? nodeOf.get(selectedId) : undefined;
+  const selectedGroup = selectedId ? graph.groups.find((group) => group.id === selectedId) : undefined;
+  const postsInGroup = selectedGroup
+    ? allNodes.filter((node) => node.type === 'post' && node.group === selectedGroup.id)
+    : [];
 
   // 선택한 점과 이어진 점. 글이면 링크 방향별로, 카테고리와 태그면 속한 글 전체다.
   const linkedNodes = (type: GraphLinkType, from: 'source' | 'target') => {
@@ -562,7 +589,7 @@ const PostGraph = ({ graph, focusId: initialFocusId, isActive, className }: Prop
                 setQuery(e.target.value);
               }}
               onKeyDown={(e) => {
-                const first = matched && visibleNodes.find((node) => matched.has(node.id));
+                const first = matched && allNodes.find((node) => matched.has(node.id));
                 if (e.key === 'Enter' && first) select(first.id);
               }}
               placeholder='Filter posts...'
@@ -597,30 +624,6 @@ const PostGraph = ({ graph, focusId: initialFocusId, isActive, className }: Prop
               <Maximize2 className='size-3.5' />
             </button>
           </div>
-
-          {/* 켜짐/꺼짐이 한눈에 보이도록 스위치로 표시한다. */}
-          <button
-            type='button'
-            role='switch'
-            aria-checked={showCategory}
-            onClick={() => setShowCategory(!showCategory)}
-            className='flex h-8 items-center gap-2 rounded-md border bg-card pl-2.5 pr-2 text-xs font-medium transition-colors hover:bg-muted dark:border-slate-700'
-          >
-            카테고리
-            <span
-              className={cn(
-                'relative h-[18px] w-8 rounded-full transition-colors',
-                showCategory ? 'bg-pink-600 dark:bg-pink-500' : 'bg-muted-foreground/40'
-              )}
-            >
-              <span
-                className={cn(
-                  'absolute left-0.5 top-0.5 size-3.5 rounded-full bg-white shadow transition-transform',
-                  showCategory && 'translate-x-3.5'
-                )}
-              />
-            </span>
-          </button>
         </div>
 
       <div ref={containerRef} className='relative min-h-0 flex-1 overflow-hidden'>
@@ -646,10 +649,11 @@ const PostGraph = ({ graph, focusId: initialFocusId, isActive, className }: Prop
             linkWidth={(link: SimLink) => (link.type === 'link' ? 1 : 0.6)}
             linkDirectionalArrowLength={(link: SimLink) => (link.type === 'link' ? 3.5 : 0)}
             linkDirectionalArrowRelPos={1}
-            linkVisibility={(link: SimLink) => isTypeVisible(link.type)}
             onNodeHover={(node: SimNode | null) => setHovered(node)}
             onNodeClick={(node: SimNode) => select(node.id)}
-            onBackgroundClick={() => setSelectedId(null)}
+            onBackgroundClick={selectRegionAt}
+            // 영역 안의 선을 눌러도 영역을 누른 것으로 본다.
+            onLinkClick={(_link: SimLink, event: MouseEvent) => selectRegionAt(event)}
             // 그리기 전에 배치 계산을 끝내고, 화면에서는 더 움직이지 않게 한다.
             warmupTicks={400}
             cooldownTicks={0}
@@ -664,7 +668,17 @@ const PostGraph = ({ graph, focusId: initialFocusId, isActive, className }: Prop
           </div>
         )}
 
-        {selected && (
+        {/* 정보 패널은 오른쪽이나 아래에 뜨므로, 가려지지 않는 왼쪽 위에 둔다. */}
+        <button
+          type='button'
+          onClick={resetView}
+          className='absolute left-3 top-3 flex h-8 items-center gap-1.5 rounded-md border bg-card px-2.5 text-xs font-medium text-muted-foreground shadow-sm transition-colors hover:bg-muted hover:text-foreground dark:border-slate-700'
+        >
+          <RotateCcw className='size-3.5' />
+          처음 화면
+        </button>
+
+        {(selected || selectedGroup) && (
           <aside
             className={cn(
               'absolute overflow-y-auto rounded-md border bg-card p-4 shadow-xl dark:border-slate-700',
@@ -682,7 +696,17 @@ const PostGraph = ({ graph, focusId: initialFocusId, isActive, className }: Prop
               <X className='size-4' />
             </button>
 
-            {selected.type === 'post' ? (
+            {selectedGroup ? (
+              <>
+                <div className='text-xs font-semibold text-pink-600 dark:text-pink-400'>Category Group</div>
+                <h2 className='mt-1 pr-6 text-base font-bold leading-snug'>{selectedGroup.label}</h2>
+                <Link href={selectedGroup.url} className={readButtonClass}>
+                  글 목록
+                  <ArrowRight className='size-3.5' />
+                </Link>
+                {renderNodeList('Posts', postsInGroup)}
+              </>
+            ) : !selected ? null : selected.type === 'post' ? (
               <>
                 <div className='text-xs font-semibold text-pink-600 dark:text-pink-400'>
                   {selected.sub}

@@ -43,8 +43,8 @@ export default async function RootLayout({
   const graph = await getPostGraph();
 
   return (
-    <html lang='en' className='h-full scroll-my-20 scroll-smooth' suppressHydrationWarning>
-      <body className='flex min-h-screen flex-col font-pretendard'>
+    <html lang='en' className='h-full scroll-my-20 scroll-smooth' data-graph='open' suppressHydrationWarning>
+      <body className='flex min-h-screen flex-col font-pretendard transition-[padding] duration-300 graph-closed:pl-graph-handle graph-open:pl-graph-open'>
         <ThemeProvider>
           <SearchProviderClient posts={searchPosts}>
             <Header />

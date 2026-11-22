@@ -17,7 +17,7 @@ const FloatingButton = () => {
   const buttonRef = useOutsideClick<HTMLButtonElement>(handleOutsideClick);
 
   return (
-    <div className='group fixed bottom-4 right-4 xl:hidden'>
+    <div className='group fixed bottom-4 right-4 xl:hidden graph-open:max-[1963px]:block'>
       <div className='group relative flex flex-col-reverse'>
         <Button
           size='icon'
