@@ -1,0 +1,677 @@
+---
+title: "build-logic: 멀티 모듈의 공통 빌드 설정을 플러그인으로 관리한다"
+desc: "여러 Gradle 모듈에서 반복되는 빌드 설정을 어떻게 관리해야 할까요? build.gradle.kts마다 설정을 복사하는 방식에서 출발해, build-logic, Included Build, Convention Plugin의 관계와 동작 원리를 정리합니다. Spring Boot + Kotlin 기반 Multi-Module 프로젝트를 고려한 예제를 사용합니다."
+date: 2026-11-22 20:56
+thumbnail: ./thumbnail.webp
+isHot: false
+isVisible: true
+tags: Gradle, Kotlin DSL, Multi Module, Included Build, Convention Plugin
+---
+
+### 🌱 포스팅 작성 이유
+
+Spring Boot와 Kotlin으로 Monorepo 기반 Multi-Module 프로젝트를 설계하고 있습니다. 실행 모듈인 `apps/api`와 비즈니스 경계인 `contexts/member`, `contexts/order`를 각각 Gradle 모듈로 나누는 과정에서 다음과 같은 의문이 생겼습니다.
+
+- 각 모듈의 `build.gradle.kts`에 반복해서 작성하는 설정은 어디에 두어야 할까?
+- 루트의 `build.gradle.kts`에서 공통 설정을 전부 처리하면 안 될까?
+- `build-logic`은 일반적인 Gradle 모듈과 무엇이 다를까?
+- `buildSrc`, `includeBuild()`, Convention Plugin은 각각 무엇일까?
+
+이전 글인 [settings.gradle.kts: 멀티 모듈 빌드의 출발점](/blog/groups/server/gradle/gradle_settings_kts)에서는 모듈을 등록하는 일과 모듈 사이의 의존성을 선언하는 일을 구분했습니다.
+
+이번에는 한 단계 더 나아가, 여러 모듈에 동일한 빌드 규칙을 적용하는 방법을 알아봅니다.
+
+---
+
+## 1. 예제 프로젝트
+
+이전 글과 동일하게 `commerce`라는 프로젝트를 사용합니다.
+
+```text
+commerce/
+├── settings.gradle.kts
+├── build.gradle.kts
+├── gradle/
+│   └── libs.versions.toml
+│
+├── apps/
+│   └── api/
+│       └── build.gradle.kts
+│
+├── contexts/
+│   ├── member/
+│   │   └── build.gradle.kts
+│   └── order/
+│       └── build.gradle.kts
+│
+└── integrations/
+    └── order-member/
+        └── build.gradle.kts
+```
+
+- `apps/api`: 여러 모듈을 조립하여 실행하는 애플리케이션 모듈
+- `contexts/member`, `contexts/order`: 각 비즈니스 영역의 코드를 소유하는 모듈
+- `integrations/order-member`: 두 모듈의 공개 계약을 연결하는 통합 모듈
+
+이들은 애플리케이션 소스 코드를 빌드하는 Gradle 서브프로젝트입니다.
+
+여기에 추가할 `build-logic`은 성격이 다릅니다. `member`나 `order`의 비즈니스 코드를 담지 않고, 이 모듈들을 **어떤 규칙으로 빌드할지** 정의합니다.
+
+> 예제에서는 `contexts`라는 이름을 사용하지만, 실제 프로젝트에서는 `bounded-context`와 같이 비즈니스 경계를 더 명확하게 나타내는 디렉터리명을 선택할 수 있습니다. Gradle의 동작 원리는 같습니다.
+
+---
+
+## 2. 왜 공통 빌드 설정을 분리해야 할까?
+
+### 2.1 각 모듈에 같은 설정을 반복하는 경우
+
+Kotlin을 사용하는 세 개의 모듈에서 다음과 같은 설정이 필요하다고 가정합니다.
+
+```kotlin
+// contexts/member/build.gradle.kts
+plugins {
+    id("org.jetbrains.kotlin.jvm")
+}
+
+kotlin {
+    jvmToolchain(21)
+}
+
+tasks.withType<Test>().configureEach {
+    useJUnitPlatform()
+}
+```
+
+```kotlin
+// contexts/order/build.gradle.kts
+plugins {
+    id("org.jetbrains.kotlin.jvm")
+}
+
+kotlin {
+    jvmToolchain(21)
+}
+
+tasks.withType<Test>().configureEach {
+    useJUnitPlatform()
+}
+```
+
+처음에는 큰 문제가 없습니다. 그런데 모듈이 늘어나면 설정이 여러 파일에 흩어집니다.
+
+예를 들어 JVM Toolchain을 변경하거나 테스트 실행 규칙을 수정할 때 관련 모듈을 빠짐없이 고쳐야 합니다. 일부 모듈만 다른 설정을 사용하게 되는 **설정 불일치(Configuration Drift)** 도 발생할 수 있습니다.
+
+핵심 문제는 Kotlin 설정이 복잡하다는 것이 아니라, **같은 빌드 정책을 여러 장소에서 별도로 관리한다**는 것입니다.
+
+### 2.2 루트 build.gradle.kts에 모으면 안 될까?
+
+다음처럼 작성할 수도 있습니다.
+
+```kotlin
+// 루트 build.gradle.kts
+subprojects {
+    tasks.withType<Test>().configureEach {
+        useJUnitPlatform()
+    }
+}
+```
+
+작은 프로젝트에서는 동작할 수 있는 방식입니다. 하지만 루트 프로젝트가 여러 하위 프로젝트의 설정을 직접 변경하는 **Cross-Project Configuration**이 됩니다.
+
+모듈마다 필요한 플러그인과 규칙이 달라질수록 조건문이 증가하고, 모듈이 스스로 어떤 빌드 정책을 사용하는지 파악하기도 어려워집니다. Gradle 공식 문서는 이러한 공통 설정을 `allprojects {}`나 `subprojects {}`에 집중시키기보다 Convention Plugin으로 추출하는 접근을 권장합니다.
+
+그러면 각 모듈이 자신에게 필요한 빌드 규칙을 명시적으로 선택할 수 있습니다.
+
+---
+
+## 3. build-logic을 이해하기 위한 세 가지 개념
+
+### 3.1 Build Logic: 빌드가 어떻게 동작하는지를 정의하는 코드
+
+Build Logic은 Gradle이 소프트웨어를 컴파일하고, 테스트하고, 패키징하기 위해 수행해야 할 설정과 규칙을 뜻합니다.
+
+예를 들면 다음과 같습니다.
+
+| Build Logic의 예 | 하는 일 |
+| --- | --- |
+| Kotlin JVM Plugin 적용 | Kotlin 코드를 컴파일할 수 있도록 구성 |
+| JVM Toolchain 지정 | 컴파일에 사용할 Java 버전 지정 |
+| JUnit Platform 설정 | 테스트 실행 방식 지정 |
+| 코드 품질 플러그인 구성 | 정적 분석·포맷 검증 규칙 지정 |
+| 공통 의존성 선언 | 특정 종류의 모듈에 필요한 의존성 추가 |
+
+`build.gradle.kts` 안의 설정도 Build Logic입니다. 따라서 `build-logic`은 특별한 종류의 비즈니스 모듈을 뜻하는 용어가 아니라 **Build Logic을 별도의 빌드로 모아 놓은 디렉터리명**입니다. 이름 자체는 관례이며 다른 이름을 사용할 수도 있습니다.
+
+### 3.2 Convention Plugin: 프로젝트가 따를 빌드 규약
+
+Convention Plugin은 팀이나 프로젝트에서 반복적으로 사용할 빌드 규칙을 하나의 Gradle Plugin으로 묶은 것입니다.
+
+예를 들어 `commerce.kotlin-jvm-conventions`라는 플러그인을 만들면 다른 모듈은 다음 한 줄로 같은 규칙을 적용할 수 있습니다.
+
+```kotlin
+plugins {
+    id("commerce.kotlin-jvm-conventions")
+}
+```
+
+이 한 줄이 의미하는 것은 다음과 같습니다.
+
+> 이 모듈은 `commerce.kotlin-jvm-conventions`가 정의한 Kotlin JVM 빌드 규약을 따른다.
+
+Convention Plugin은 새로운 컴파일러가 아닙니다. 이미 존재하는 Gradle/Kotlin 플러그인을 적용하고, 그것들의 설정을 프로젝트의 공통 규칙에 맞게 구성하는 사용자 정의 플러그인입니다.
+
+### 3.3 Included Build: 다른 Gradle 빌드를 현재 빌드에 포함한다
+
+`build-logic`은 보통 **Included Build**로 연결합니다.
+
+```text
+commerce                       ← 메인 Gradle 빌드
+├── settings.gradle.kts
+├── apps/api                   ← 메인 빌드의 서브프로젝트
+├── contexts/member            ← 메인 빌드의 서브프로젝트
+└── build-logic                ← 별도 Gradle 빌드 (Included Build)
+    ├── settings.gradle.kts
+    ├── build.gradle.kts
+    └── src/main/kotlin/...
+```
+
+이전 글에서 다룬 `include()`와 이번에 사용할 `includeBuild()`는 다릅니다.
+
+| 구분 | `include(":contexts:member")` | `includeBuild("build-logic")` |
+| --- | --- | --- |
+| 의미 | 메인 빌드에 서브프로젝트 등록 | 별도의 Gradle 빌드를 포함 |
+| 대상 | Member 애플리케이션 코드 | 공통 플러그인 등의 별도 빌드 산출물 |
+| 빌드 설정 | 메인 빌드의 설정을 사용 | 자체 `settings.gradle.kts`와 `build.gradle.kts`를 가질 수 있음 |
+| 프로젝트 경로 | `:contexts:member` | 일반적으로 메인 빌드의 `:build-logic` 서브프로젝트가 아님 |
+
+`includeBuild()`로 추가한 `build-logic`을 `implementation(project(":build-logic"))`로 의존하는 것이 아닙니다. 여기에서 필요한 것은 애플리케이션 라이브러리 의존성이 아니라, **빌드 시 적용할 플러그인을 제공하는 관계**입니다.
+
+---
+
+## 4. 실제로 build-logic 구성하기
+
+Kotlin/JVM 모듈이 공통으로 사용할 Convention Plugin을 작성해 보겠습니다.
+
+> 아래 예제는 구조와 실행 흐름을 보여주기 위한 최소 구성입니다. Java 21 Toolchain을 사용하며, Gradle과 Kotlin Gradle Plugin의 호환 버전 조합을 사용해야 합니다. 예시의 Kotlin 버전은 `2.4.21`입니다. 사용 중인 Gradle Wrapper는 Kotlin 공식 호환성 표에 따라 선택합니다.
+
+### 4.1 최종 디렉터리 구조
+
+```text
+commerce/
+├── settings.gradle.kts
+├── build.gradle.kts
+├── gradle/
+│   └── libs.versions.toml
+│
+├── build-logic/
+│   ├── settings.gradle.kts
+│   ├── build.gradle.kts
+│   └── src/
+│       └── main/
+│           └── kotlin/
+│               └── commerce.kotlin-jvm-conventions.gradle.kts
+│
+├── apps/
+│   └── api/
+│       └── build.gradle.kts
+├── contexts/
+│   ├── member/
+│   │   └── build.gradle.kts
+│   └── order/
+│       └── build.gradle.kts
+└── integrations/
+    └── order-member/
+        └── build.gradle.kts
+```
+
+`build-logic` 아래의 `src/main/kotlin/*.gradle.kts` 파일은 일반 애플리케이션 소스가 아닙니다. Gradle이 **Precompiled Script Plugin**으로 컴파일할 스크립트입니다.
+
+### 4.2 메인 빌드의 settings.gradle.kts
+
+```kotlin
+// commerce/settings.gradle.kts
+pluginManagement {
+    includeBuild("build-logic")
+    repositories {
+        gradlePluginPortal()
+        mavenCentral()
+    }
+}
+
+rootProject.name = "commerce"
+
+include(
+    ":apps:api",
+    ":contexts:member",
+    ":contexts:order",
+    ":integrations:order-member",
+)
+```
+
+여기서 다음 코드가 핵심입니다.
+
+```kotlin
+pluginManagement {
+    includeBuild("build-logic")
+}
+```
+
+Gradle이 `plugins {}` 블록에서 플러그인을 찾을 때, `build-logic`에서 제공하는 플러그인도 찾을 수 있도록 등록합니다.
+
+왜 `pluginManagement` 안에 두었을까요? 여기서는 애플리케이션 소스 의존성이 아니라 **플러그인 식별 및 적용**이 목적이기 때문입니다. 단순한 `includeBuild("build-logic")` 역시 특정 상황에서는 사용할 수 있지만, Convention Plugin을 `plugins {}`에서 사용한다는 의도를 드러내기 위해 이 예제에서는 `pluginManagement`를 선택했습니다.
+
+### 4.3 메인 빌드의 gradle/libs.versions.toml
+
+```toml
+# commerce/gradle/libs.versions.toml
+[versions]
+kotlin = "2.4.21"
+
+[libraries]
+kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
+
+[plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+```
+
+Version Catalog는 플러그인 및 라이브러리의 좌표와 버전을 한곳에 정의합니다. 그 자체로 플러그인을 적용하거나 JVM Toolchain을 설정하는 것은 아닙니다.
+
+| 구성 요소 | 관리하는 것 |
+| --- | --- |
+| `libs.versions.toml` | 플러그인/라이브러리 식별자와 버전 |
+| `build-logic` | 반복되는 플러그인 적용과 빌드 규칙 |
+| 각 모듈의 `build.gradle.kts` | 사용할 규약과 모듈 고유 의존성 |
+
+서로 경쟁하는 대안이 아니라 역할이 다른 구성 요소입니다.
+
+### 4.4 build-logic/settings.gradle.kts
+
+```kotlin
+// commerce/build-logic/settings.gradle.kts
+rootProject.name = "commerce-build-logic"
+
+dependencyResolutionManagement {
+    versionCatalogs {
+        create("libs") {
+            from(files("../gradle/libs.versions.toml"))
+        }
+    }
+}
+```
+
+`build-logic`은 별도의 Gradle 빌드이므로 메인 빌드의 Version Catalog를 자동으로 상속받는다고 생각하면 안 됩니다. 위 코드는 메인 빌드의 `gradle/libs.versions.toml` 파일을 명시적으로 다시 가져오는 설정입니다.
+
+이렇게 하면 Kotlin Gradle Plugin의 버전을 메인 빌드와 `build-logic`에서 일관되게 관리할 수 있습니다.
+
+### 4.5 build-logic/build.gradle.kts
+
+```kotlin
+// commerce/build-logic/build.gradle.kts
+plugins {
+    `kotlin-dsl`
+}
+
+repositories {
+    gradlePluginPortal()
+    mavenCentral()
+}
+
+dependencies {
+    implementation(libs.kotlin.gradle.plugin)
+}
+```
+
+각 설정의 의미는 다음과 같습니다.
+
+| 코드 | 역할 |
+| --- | --- |
+| `` `kotlin-dsl` `` | Kotlin DSL로 Gradle Plugin을 작성할 수 있도록 구성 |
+| `repositories { ... }` | `build-logic`이 사용하는 빌드 의존성을 해결할 저장소 지정 |
+| `implementation(libs.kotlin.gradle.plugin)` | Convention Plugin 안에서 Kotlin JVM Plugin을 적용하기 위해 해당 플러그인을 빌드 클래스패스에 추가 |
+
+여기서 `implementation(...)`은 `build-logic` 자체의 플러그인 개발을 위한 의존성입니다. Member나 Order의 애플리케이션 런타임 의존성이 아닙니다.
+
+### 4.6 Convention Plugin 작성하기
+
+```kotlin
+// commerce/build-logic/src/main/kotlin/
+// commerce.kotlin-jvm-conventions.gradle.kts
+import org.gradle.api.tasks.testing.Test
+
+plugins {
+    id("org.jetbrains.kotlin.jvm")
+}
+
+kotlin {
+    jvmToolchain(21)
+}
+
+tasks.withType<Test>().configureEach {
+    useJUnitPlatform()
+}
+```
+
+이제 다음 세 가지 규칙이 하나의 플러그인에 포함됩니다.
+
+1. Kotlin/JVM 플러그인을 적용한다.
+2. Java 21 Toolchain을 사용한다.
+3. `Test` 태스크에서 JUnit Platform을 사용한다.
+
+`configureEach`는 태스크마다 일일이 설정 코드를 작성하지 않고, 조건에 맞는 태스크를 지연 구성 방식으로 설정합니다.
+
+또한 파일명이 중요합니다.
+
+```text
+commerce.kotlin-jvm-conventions.gradle.kts
+                 ↓
+Plugin ID = commerce.kotlin-jvm-conventions
+```
+
+Precompiled Script Plugin은 파일명을 기준으로 Plugin ID를 생성합니다. 여기서는 별도의 Kotlin `class MyPlugin : Plugin<Project>` 구현이나 Plugin ID 등록 코드를 작성할 필요가 없습니다.
+
+> **주의**: `useJUnitPlatform()`은 테스트를 실행할 플랫폼을 선택하는 설정입니다. JUnit 테스트 엔진과 테스트 라이브러리 의존성을 자동으로 추가하지 않습니다. 테스트를 실행하는 모듈에는 JUnit Jupiter 등 필요한 테스트 의존성을 별도로 선언해야 합니다.
+
+### 4.7 각 BC 모듈에 적용하기
+
+```kotlin
+// contexts/member/build.gradle.kts
+plugins {
+    id("commerce.kotlin-jvm-conventions")
+}
+
+dependencies {
+    // Member 모듈에만 필요한 의존성을 이곳에 작성한다.
+}
+```
+
+```kotlin
+// contexts/order/build.gradle.kts
+plugins {
+    id("commerce.kotlin-jvm-conventions")
+}
+
+dependencies {
+    // Order 모듈에만 필요한 의존성을 이곳에 작성한다.
+}
+```
+
+이제 각 모듈에서 Kotlin Plugin, JVM Toolchain, 테스트 플랫폼을 반복 설정하지 않아도 됩니다.
+
+중요한 점은 `build-logic`이 Member와 Order 사이의 코드 의존성을 만들지 않는다는 사실입니다. Member와 Order는 같은 빌드 규약을 사용하지만, 서로의 비즈니스 코드를 참조하지 않아도 됩니다.
+
+### 4.8 실행 모듈에는 무엇을 적용할까?
+
+```kotlin
+// apps/api/build.gradle.kts
+plugins {
+    id("commerce.kotlin-jvm-conventions")
+    // 실제 Spring Boot 애플리케이션이라면
+    // Spring Boot 및 Kotlin Spring Plugin 등을 별도로 적용한다.
+}
+
+dependencies {
+    implementation(project(":contexts:member"))
+    implementation(project(":contexts:order"))
+    implementation(project(":integrations:order-member"))
+}
+```
+
+이 예제는 `build-logic`의 적용 방법을 보여주기 위한 것이므로, Spring Boot 애플리케이션을 실행하기 위한 모든 플러그인과 의존성을 포함하지는 않았습니다.
+
+실제 프로젝트에서는 다음처럼 서로 다른 역할의 Convention Plugin을 둘 수 있습니다.
+
+```text
+build-logic/src/main/kotlin/
+├── commerce.kotlin-jvm-conventions.gradle.kts
+├── commerce.spring-library-conventions.gradle.kts
+└── commerce.spring-boot-conventions.gradle.kts
+```
+
+- `kotlin-jvm-conventions`: 여러 모듈에 공통으로 적용할 Kotlin/JVM 규칙
+- `spring-library-conventions`: 실행 파일이 아닌 Spring 라이브러리 모듈에 적용할 규칙
+- `spring-boot-conventions`: 실제 Spring Boot 실행 모듈에 적용할 규칙
+
+BC마다 무조건 Spring Boot Plugin을 적용하는 것보다 라이브러리 모듈과 실행 모듈을 구분하는 것이 적절합니다. 다만 처음부터 세 개의 플러그인을 모두 만들기보다 반복되는 규칙이 확인될 때 추출해도 됩니다.
+
+---
+
+## 5. Gradle은 공통 플러그인을 어떤 순서로 적용할까?
+
+`./gradlew :contexts:member:tasks` 명령을 실행한다고 가정하겠습니다.
+
+```text
+1. 메인 빌드 초기화
+   └── commerce/settings.gradle.kts
+       ├── build-logic을 Included Build로 등록
+       └── member, order, api 등의 서브프로젝트 등록
+
+2. 플러그인 준비
+   └── build-logic의 빌드 설정을 확인
+       └── commerce.kotlin-jvm-conventions 플러그인 제공
+
+3. Member 모듈 구성
+   └── contexts/member/build.gradle.kts
+       └── id("commerce.kotlin-jvm-conventions")
+           ├── Kotlin JVM Plugin 적용
+           ├── JVM Toolchain 설정
+           └── Test 태스크 설정
+
+4. 태스크 실행
+   └── :contexts:member:tasks 결과 출력
+```
+
+즉 `build-logic`에서 만든 플러그인은 메인 빌드가 필요할 때 빌드 규칙으로 적용됩니다. 실행 중인 Spring 애플리케이션이 `build-logic`의 클래스를 호출하는 구조가 아닙니다.
+
+### 5.1 설정이 적용되었는지 확인하기
+
+```bash
+# 메인 빌드가 인식한 프로젝트 목록 확인
+./gradlew projects
+
+# Member 모듈의 태스크 목록 확인
+./gradlew :contexts:member:tasks --all
+
+# Member 모듈 컴파일
+./gradlew :contexts:member:compileKotlin
+
+# Member 모듈 테스트 (테스트 의존성이 구성되어 있을 때)
+./gradlew :contexts:member:test
+```
+
+`./gradlew projects`에서 `build-logic`을 `:contexts:member`와 같은 일반 서브프로젝트로 찾으려 해서는 안 됩니다. 메인 빌드에는 `includeBuild()`로 연결된 별도의 빌드이기 때문입니다.
+
+또한 Java 21 Toolchain이 로컬에 없고 자동 다운로드 저장소도 구성하지 않았다면 Toolchain 탐색 오류가 발생할 수 있습니다.
+
+---
+
+## 6. buildSrc와 build-logic은 무엇이 다른가?
+
+Gradle에는 공통 빌드 코드를 보관하는 대표적인 방법이 두 가지 있습니다.
+
+### 6.1 buildSrc
+
+```text
+commerce/
+├── buildSrc/
+│   ├── build.gradle.kts
+│   └── src/main/kotlin/
+│       └── commerce.kotlin-jvm-conventions.gradle.kts
+└── settings.gradle.kts
+```
+
+`buildSrc`는 Gradle이 특별하게 인식하는 디렉터리입니다. 별도의 `includeBuild()`를 작성하지 않아도 빌드 로직을 사용할 수 있습니다.
+
+간단하게 시작하기 좋지만, 빌드 로직 변경의 영향을 받는 범위와 클래스패스 동작 측면에서 제약이 있을 수 있습니다.
+
+### 6.2 build-logic Included Build
+
+```text
+commerce/
+├── build-logic/
+│   ├── settings.gradle.kts
+│   ├── build.gradle.kts
+│   └── src/main/kotlin/
+│       └── commerce.kotlin-jvm-conventions.gradle.kts
+└── settings.gradle.kts
+```
+
+`build-logic`은 별도의 Gradle 빌드로 취급됩니다. Gradle 공식 문서는 규모가 있는 빌드에서 빌드 로직을 명시적인 Included Build로 분리하는 방식을 우선 권장합니다.
+
+| 비교 | `buildSrc` | `build-logic` (Included Build) |
+| --- | --- | --- |
+| 등록 방법 | Gradle이 특별 디렉터리로 자동 인식 | `includeBuild()`로 명시적 포함 |
+| 독립성 | 메인 빌드에 밀접하게 결합 | 독립적인 Gradle 빌드 |
+| 사용 시작 | 비교적 간단 | 설정 파일을 추가해야 함 |
+| 규모 확장 | 가능하지만 영향 범위에 주의 | 별도 하위 프로젝트로 빌드 로직 분할 가능 |
+| 권장 상황 | 간단한 실험·소규모 구성 | 여러 모듈에서 장기적으로 재사용할 빌드 정책 |
+
+단, `build-logic`을 사용하면 반드시 빌드가 빨라진다는 뜻은 아닙니다. 빌드 로직의 구성과 변경 범위에 따라 태스크 무효화 범위가 줄어들 수 있다는 의미입니다. 플러그인 수와 클래스패스가 지나치게 다양해지면 오히려 관리·성능 비용이 발생할 수 있습니다.
+
+---
+
+## 7. 혼동하기 쉬운 개념 정리
+
+### 7.1 build-logic도 Gradle 모듈인가?
+
+엄밀하게는 구분해야 합니다.
+
+`build-logic`은 일반적으로 **독립적인 Gradle 빌드(Included Build)** 입니다. 그 안에 하나 또는 여러 Gradle 프로젝트를 둘 수 있지만, 메인 빌드의 `include(":build-logic")`로 등록하는 서브프로젝트와는 다릅니다.
+
+### 7.2 루트 build.gradle.kts가 곧 공통 설정 파일 아닌가?
+
+루트 프로젝트의 빌드 설정 파일인 것은 맞습니다. 하지만 모든 모듈의 빌드 규칙을 자동으로 상속시키는 파일은 아닙니다.
+
+각 모듈에 동일한 규칙을 적용하려면 `subprojects {}` 등을 사용해 강제로 설정하거나, 명시적인 Convention Plugin을 적용해야 합니다. 반복되는 빌드 정책에는 후자를 우선 검토합니다.
+
+### 7.3 build-logic이 모듈 간 의존성까지 관리해야 하나?
+
+필요한 경우 공통 의존성을 설정할 수 있지만, 비즈니스 모듈 사이의 관계를 일괄 주입하는 용도로 사용하지 않는 것이 좋습니다.
+
+예를 들어 `order`가 `member`를 직접 참조하면 안 된다는 아키텍처 정책이 있다면 다음 설정을 Convention Plugin에서 몰래 추가해서는 안 됩니다.
+
+```kotlin
+// 지양할 예시: 모든 BC에 다른 BC의 의존성을 무조건 추가
+// dependencies {
+//     implementation(project(":contexts:member"))
+// }
+```
+
+빌드 규칙의 재사용과 아키텍처상 모듈 의존 관계는 별개의 관심사입니다.
+
+### 7.4 libs.versions.toml만 쓰면 build-logic은 필요 없지 않을까?
+
+아닙니다. 두 도구가 해결하는 문제는 다릅니다.
+
+```text
+libs.versions.toml
+    └── 어떤 플러그인/라이브러리를 어떤 버전으로 사용할지
+
+build-logic
+    └── 그 플러그인을 어떻게 적용하고 설정할지
+
+각 모듈의 build.gradle.kts
+    └── 어떤 규약과 어떤 개별 의존성을 선택할지
+```
+
+예를 들어 Kotlin 버전은 Version Catalog에서 관리하고, `jvmToolchain(21)` 규칙은 Convention Plugin에서 관리할 수 있습니다.
+
+### 7.5 Convention Plugin을 모든 모듈에 무조건 적용해야 하나?
+
+그럴 필요는 없습니다.
+
+실행 모듈과 라이브러리 모듈은 필요한 빌드 규칙이 다릅니다. 각 모듈이 자신의 목적에 맞는 Convention Plugin을 선택해야 합니다. 한 곳에 지나치게 많은 규칙을 쌓은 거대한 공용 플러그인은 지양합니다.
+
+---
+
+## 8. 현재 프로젝트에 적용한다면
+
+Spring Boot + Kotlin, Monorepo + Multi-Module, Bounded Context 중심 구조를 기준으로 다음처럼 시작할 수 있습니다.
+
+```text
+project/
+├── apps/
+│   └── api/                              # 실행·배포 단위
+│       └── build.gradle.kts
+│
+├── bounded-context/
+│   ├── identity/                         # 비즈니스 모듈
+│   │   └── build.gradle.kts
+│   ├── talent/
+│   │   └── build.gradle.kts
+│   └── recruiting/
+│       └── build.gradle.kts
+│
+├── build-logic/                          # 빌드 규칙만 관리
+│   ├── settings.gradle.kts
+│   ├── build.gradle.kts
+│   └── src/main/kotlin/
+│       ├── company.kotlin-jvm-conventions.gradle.kts
+│       └── company.spring-boot-conventions.gradle.kts
+│
+├── gradle/
+│   └── libs.versions.toml
+├── settings.gradle.kts
+└── build.gradle.kts
+```
+
+예를 들어 `apps/api`와 각 BC는 서로 다른 규칙을 선택할 수 있습니다.
+
+```kotlin
+// apps/api/build.gradle.kts (개념 예시)
+plugins {
+    id("company.spring-boot-conventions")
+}
+```
+
+```kotlin
+// bounded-context/talent/build.gradle.kts (개념 예시)
+plugins {
+    id("company.kotlin-jvm-conventions")
+}
+```
+
+> 위 두 플러그인 ID는 직접 구현했을 때만 사용 가능합니다. 이 글에서 실제 구현한 플러그인은 `commerce.kotlin-jvm-conventions` 하나이며, Spring Boot 전용 Convention Plugin의 구현은 추후 별도로 다룰 수 있습니다.
+
+도메인을 어떻게 분리할지 결정하는 문제와 공통 빌드 설정을 어떻게 재사용할지 결정하는 문제를 혼동하지 않는 것이 중요합니다.
+
+- **Bounded Context**: 어떤 비즈니스 모델과 규칙을 함께 소유할 것인가?
+- **Gradle 서브프로젝트**: 어떤 코드를 독립적으로 컴파일하고 의존성을 관리할 것인가?
+- **Convention Plugin**: 그 서브프로젝트를 어떤 공통 규칙으로 빌드할 것인가?
+
+---
+
+## 9. 마무리
+
+처음에는 `build-logic`도 `member`, `order`와 같은 또 하나의 Gradle 모듈이라고 생각하기 쉽습니다. 하지만 목적이 다릅니다.
+
+> `member`와 `order`는 애플리케이션 기능을 구현하고, `build-logic`은 그 기능을 담은 모듈을 어떤 규칙으로 빌드할지 정의한다.
+
+핵심을 정리하면 다음과 같습니다.
+
+- 각 모듈에 반복되는 빌드 규칙은 Convention Plugin으로 추출할 수 있습니다.
+- `build-logic`은 이러한 플러그인을 보관하는 Included Build로 구성하는 것이 일반적인 권장 방식입니다.
+- 메인 빌드의 `settings.gradle.kts`에서 `includeBuild("build-logic")`로 연결합니다.
+- 각 모듈은 `plugins { id("...") }`로 자신에게 필요한 빌드 규칙을 선택합니다.
+- `libs.versions.toml`은 버전·의존성 좌표를, `build-logic`은 반복 설정과 규칙을 관리합니다.
+- `build-logic`은 애플리케이션의 Bounded Context나 Domain을 공유하기 위한 모듈이 아닙니다.
+
+이전 글이 **어떤 모듈이 빌드에 참여하는가**에 관한 이야기였다면, 이번 글은 **그 모듈들에 공통의 빌드 정책을 어떻게 적용하는가**에 관한 이야기입니다.
+
+### 이어서 학습할 내용
+
+- **Version Catalog**: `libs.versions.toml`로 플러그인과 의존성 버전을 중앙에서 관리하는 방법
+- **Precompiled Script Plugin과 Binary Plugin**: 설정이 복잡해졌을 때 Kotlin 클래스로 직접 플러그인을 구현하는 기준
+- **Gradle Configuration Cache**: 빌드 설정이 캐시에 저장되기 위한 조건과 플러그인 작성 시 주의점
+- **Gradle TestKit**: 공통 빌드 규칙도 테스트 코드로 검증하는 방법
+- **Spring Boot 라이브러리 모듈 분리**: 실행 가능한 Boot 모듈과 일반 Kotlin/JVM 라이브러리 모듈에 서로 다른 Convention Plugin을 적용하는 방법
+
+---
+
+#### 📕 Reference
+
+- Gradle User Manual, [Best Practices for Structuring Builds](https://docs.gradle.org/current/userguide/best_practices_structuring_builds.html)
+- Gradle User Manual, [Implementing Convention Plugins](https://docs.gradle.org/current/userguide/implementing_gradle_plugins_convention.html)
+- Gradle User Manual, [Implementing Pre-compiled Script Plugins](https://docs.gradle.org/current/userguide/implementing_gradle_plugins_precompiled.html)
+- Gradle User Manual, [Version Catalogs](https://docs.gradle.org/current/userguide/version_catalogs.html)
+- Kotlin Docs, [Configure a Gradle project](https://kotlinlang.org/docs/gradle-configure-project.html)
+- 이전 글, [settings.gradle.kts: 멀티 모듈 빌드의 출발점](/blog/groups/server/gradle/gradle_settings_kts)

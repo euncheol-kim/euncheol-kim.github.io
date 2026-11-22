@@ -23,14 +23,19 @@ export const GraphDrawer = ({ graph }: { graph: PostGraphData }) => {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(true);
   const [hasOpened, setHasOpened] = useState(false);
-  // 처음 들어왔을 때 소개 글부터 보이도록 올라온 상태로 시작한다.
-  const [isIntroOpen, setIsIntroOpen] = useState(true);
   const isBlog = pathname.startsWith('/blog');
 
   // 글 본문에서 열면 읽고 있는 글을 선택해 둔다.
   const currentPostId = graph.nodes.find(
     (node) => node.type === 'post' && node.id === decodeURIComponent(pathname)
   )?.id;
+
+  // 소개 글은 목록 화면에 처음 들어왔을 때 올라온 상태로 시작한다.
+  // 글 본문에서는 그래프와 글 정보가 가려지지 않도록 접어 둔다.
+  const [isIntroOpen, setIsIntroOpen] = useState(!currentPostId);
+  useEffect(() => {
+    if (currentPostId) setIsIntroOpen(false);
+  }, [currentPostId]);
 
   // 패널이 보이는 화면(lg 이상)에서만 그래프를 불러온다.
   useEffect(() => {

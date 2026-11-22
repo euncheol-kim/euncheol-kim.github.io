@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 
 const ScrollProgressBar = () => {
-  const [mounted, setMounted] = useState(false);
   const [scrollTop, setScrollTop] = useState(0);
 
   const onScroll = () => {
@@ -23,14 +22,9 @@ const ScrollProgressBar = () => {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) return null;
-
   return (
-    <div className='fixed inset-x-0 top-0 z-20 h-1 bg-background transition-[left] duration-300 graph-open:left-graph'>
+    // 헤더 맨 아래에 붙는다. 헤더 안의 마지막 요소로 그려지므로 위치를 따로 잡지 않는다.
+    <div className='h-1 w-full bg-background'>
       <div className='h-1 bg-primary' style={{ width: `${scrollTop}%` }}></div>
     </div>
   );

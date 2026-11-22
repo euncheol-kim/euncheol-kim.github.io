@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 
 import { GraphLinkType, GraphNode, PostGraph as PostGraphData } from '@/config/types';
 import { cn } from '@/lib/utils';
@@ -11,6 +11,7 @@ import {
   ArrowRight,
   CalendarDays,
   ChevronRight,
+  LocateFixed,
   Maximize2,
   Minus,
   Plus,
@@ -95,6 +96,9 @@ interface Props {
 const PostGraph = ({ graph, focusId: initialFocusId, isActive, className }: Props) => {
   const { resolvedTheme } = useTheme();
   const router = useRouter();
+  const pathname = usePathname();
+  // 다른 글로 옮겨 간 뒤 찾아갈 본문 속 링크의 주소. 화면이 바뀌면 찾아서 보여 주고 비운다.
+  const pendingMention = useRef<string | null>(null);
   const colors = resolvedTheme === 'dark' ? PALETTE.dark : PALETTE.light;
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -548,7 +552,45 @@ const PostGraph = ({ graph, focusId: initialFocusId, isActive, className }: Prop
   const controlClass =
     'flex size-8 items-center justify-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground';
 
-  const renderNodeList = (title: string, nodes: SimNode[]) =>
+  // 본문에서 다른 글을 언급한(링크를 건) 자리를 찾아 화면 가운데로 옮기고, 잠깐 색을 입혀 알려 준다.
+  const revealMention = (targetUrl: string) => {
+    const link = document.querySelector<HTMLElement>(
+      `article a[href="${targetUrl}"], article a[href^="${targetUrl}#"]`
+    );
+    if (!link) return false;
+    link.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    link.animate(
+      [
+        { backgroundColor: 'rgba(236, 72, 153, 0.45)', boxShadow: '0 0 0 4px rgba(236, 72, 153, 0.45)' },
+        { backgroundColor: 'rgba(236, 72, 153, 0.45)', boxShadow: '0 0 0 4px rgba(236, 72, 153, 0.45)', offset: 0.7 },
+        { backgroundColor: 'transparent', boxShadow: '0 0 0 4px transparent' },
+      ],
+      { duration: 2600 }
+    );
+    return true;
+  };
+
+  // from 글의 본문에서 to 글을 언급한 자리를 보여 준다. 다른 화면을 보고 있었다면 먼저 from 글로 옮긴다.
+  const showMention = (from: SimNode, to: SimNode) => {
+    if (decodeURIComponent(pathname) === from.url) return revealMention(to.url);
+    pendingMention.current = to.url;
+    router.push(from.url);
+  };
+
+  // 글을 옮겨 온 직후에는 본문이 아직 그려지지 않았을 수 있어, 잠시 동안 되풀이해 찾는다.
+  useEffect(() => {
+    const targetUrl = pendingMention.current;
+    if (!targetUrl) return;
+    pendingMention.current = null;
+    let tries = 0;
+    const timer = setInterval(() => {
+      if (revealMention(targetUrl) || ++tries >= 20) clearInterval(timer);
+    }, 150);
+    return () => clearInterval(timer);
+  }, [pathname]);
+
+  // mentionFrom을 주면 항목마다 '그 글의 본문에서 항목을 언급한 자리로 가는 버튼'을 붙인다.
+  const renderNodeList = (title: string, nodes: SimNode[], mentionFrom?: SimNode) =>
     nodes.length > 0 && (
       <div className='mt-4 border-t pt-3 dark:border-slate-700'>
         <h3 className='flex items-center gap-1.5 text-[13px] font-bold'>
@@ -557,15 +599,26 @@ const PostGraph = ({ graph, focusId: initialFocusId, isActive, className }: Prop
         </h3>
         <ul className='-mx-2 mt-1'>
           {nodes.map((node) => (
-            <li key={node.id}>
+            <li key={node.id} className='flex items-center gap-1'>
               <button
                 type='button'
                 onClick={() => select(node.id)}
-                className='group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] font-medium leading-snug transition-colors hover:bg-muted'
+                className='group flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] font-medium leading-snug transition-colors hover:bg-muted'
               >
                 <span className='min-w-0 flex-1'>{node.label}</span>
                 <ChevronRight className='size-3.5 shrink-0 text-muted-foreground opacity-40 transition-opacity group-hover:opacity-100' />
               </button>
+              {mentionFrom && (
+                <button
+                  type='button'
+                  title='본문에서 언급한 위치로 이동'
+                  onClick={() => showMention(mentionFrom, node)}
+                  className='mr-2 flex h-7 shrink-0 items-center gap-1 rounded-md border px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground dark:border-slate-700'
+                >
+                  <LocateFixed className='size-3' />
+                  언급 위치
+                </button>
+              )}
             </li>
           ))}
         </ul>
@@ -636,6 +689,10 @@ const PostGraph = ({ graph, focusId: initialFocusId, isActive, className }: Prop
             graphData={isForceReady ? data : EMPTY_DATA}
             backgroundColor='rgba(0,0,0,0)'
             nodeLabel={() => ''}
+            // 점은 직접 그리지만, 화살표가 점의 가장자리에서 멈추려면 라이브러리도 점의 크기를 알아야 한다.
+            // (반지름 = nodeRelSize × √nodeVal) 테두리만큼 여유를 더한다.
+            nodeRelSize={1}
+            nodeVal={(node: SimNode) => (radiusOf(node) + 2.5) ** 2}
             nodeCanvasObject={drawNode}
             nodePointerAreaPaint={paintPointerArea}
             onRenderFramePre={drawRegions}
@@ -647,7 +704,8 @@ const PostGraph = ({ graph, focusId: initialFocusId, isActive, className }: Prop
               return link.type === 'link' ? colors.edgeLink : colors.edge;
             }}
             linkWidth={(link: SimLink) => (link.type === 'link' ? 1 : 0.6)}
-            linkDirectionalArrowLength={(link: SimLink) => (link.type === 'link' ? 3.5 : 0)}
+            // 글 사이의 링크는 참조하는 글에서 참조되는 글 쪽으로 화살표를 그린다.
+            linkDirectionalArrowLength={(link: SimLink) => (link.type === 'link' ? 7 : 0)}
             linkDirectionalArrowRelPos={1}
             onNodeHover={(node: SimNode | null) => setHovered(node)}
             onNodeClick={(node: SimNode) => select(node.id)}
@@ -704,7 +762,7 @@ const PostGraph = ({ graph, focusId: initialFocusId, isActive, className }: Prop
                   글 목록
                   <ArrowRight className='size-3.5' />
                 </Link>
-                {renderNodeList('Posts', postsInGroup)}
+                {renderNodeList('작성된 게시글', postsInGroup)}
               </>
             ) : !selected ? null : selected.type === 'post' ? (
               <>
@@ -731,8 +789,9 @@ const PostGraph = ({ graph, focusId: initialFocusId, isActive, className }: Prop
                     <ArrowRight className='size-3.5' />
                   </Link>
                 )}
-                {renderNodeList('Links', linkedNodes('link', 'source'))}
-                {renderNodeList('Backlinks', linkedNodes('link', 'target'))}
+                {/* 언급한 자리는 고른 글의 본문에 있다. 참조되어진 쪽은 다른 글의 본문이라 버튼을 두지 않는다. */}
+                {renderNodeList('참조한 게시글', linkedNodes('link', 'source'), selected)}
+                {renderNodeList('참조되어진 게시글', linkedNodes('link', 'target'))}
               </>
             ) : (
               <>
@@ -742,7 +801,7 @@ const PostGraph = ({ graph, focusId: initialFocusId, isActive, className }: Prop
                   글 목록
                   <ArrowRight className='size-3.5' />
                 </Link>
-                {renderNodeList('Posts', linkedNodes('category', 'target'))}
+                {renderNodeList('작성된 게시글', linkedNodes('category', 'target'))}
               </>
             )}
           </aside>
