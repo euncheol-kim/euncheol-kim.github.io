@@ -41,6 +41,6 @@ JPA를 통해 엔티티를 저장하거나 조회하면, 이 객체는 "영속�
 
 기본적으로 JPA는 엔티팉의 상태 변화를 연관된 다른 엔티티로 전파하지 않습니다.
 예를 들어, 부모 객체를 persist()(저장) 한다고 해서 자식 객체까지 자동으로 저장되지 않습니다.
-자식도 개별적으로 persist()를 해줘야합니다. 이러한 번거로움을 해결하기 위해 JPA는 CascadeType옵션을 제공합니다.
+자식도 개별적으로 persist()를 해줘야합니다. 이러한 번거로움을 해결하기 위해 JPA는 CascadeType옵션을 제공합니다. 옵션별 차이는 [Spring Data JPA의 Cascade Type](/blog/groups/server/spring_data_jpa/spring_data_jpa_casecade)에 정리했습니다.
 
 casecade는 다음 포스팅에서 다루겠습니다.

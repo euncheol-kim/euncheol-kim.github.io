@@ -10,7 +10,7 @@ tags: Author:ChatGPT, Python, Fast API, SQLAlchemy, ORM, JPA, Relationship
 
 # Spring/JPA 개발자를 위한 FastAPI + SQLAlchemy 객체 관계 정리
 
-Spring Boot와 JPA를 공부하다가 FastAPI를 접하면 객체 간 관계를 어떻게 설정해야 하는지부터 헷갈리기 쉽다.
+Spring Boot와 JPA를 공부하다가 FastAPI를 접하면 객체 간 관계를 어떻게 설정해야 하는지부터 헷갈리기 쉽다. SQLAlchemy의 기본 동작은 [SQLAlchemy2.0 동작 메커니즘의 이해를 위한 기초 학습 정리](/blog/groups/server/SQLAlchemy/SQLAlchemy_concept)에 정리했다.
 
 JPA에서는 `@ManyToOne`, `@OneToMany`, `mappedBy`, `@JoinColumn` 같은 애너테이션을 사용해서 관계를 표현한다. 반면 FastAPI에서는 이런 기능을 직접 제공하지 않는다.
 

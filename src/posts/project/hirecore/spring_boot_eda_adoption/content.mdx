@@ -96,7 +96,7 @@ tags: Spring Boot, Architecture, Event Driven Architecture, DDD
 ---
 
 ## STEP 1. 이벤트 기반 아키텍처(EDA)란 무엇인가?
-EDA는 이벤트를 중심으로 동작하는 아키텍처입니다. 핵심 개념은 아래와 같습니다.
+EDA는 이벤트를 중심으로 동작하는 아키텍처입니다. 핵심 개념은 아래와 같습니다. 개념을 더 자세히 정리한 글은 [이벤트 기반 아키텍처(Event-Driven Architecture): 호출 대신 사실을 알린다](/blog/groups/cs/architecture/event_driven_architecture)입니다.
 | 개념 | 설명 |
 |---|---|
 | <span id="event">이벤트(Event)</span> | 시스템 내에서 발생하는 사건 |
@@ -806,7 +806,7 @@ private MemberAccount getOrCreateMemberAccount(SocialUserProfileResult profile) 
 > <u>ID 참조 방식을 택하며 객체 간의 물리적 연결은 끊었지만, 이벤트를 통해 논리적 흐름을 이어줌으로써 시스템은 더욱 유연</u>해졌습니다. 
 
 #### <font color="steelblue"><b>3. 완성은 끝이 아닌 새로운 시작</b></font>
-> 1. Transactional Outbox Pattern: 이벤트 발행의 원자성을 보장하기 위한 고민
+> 1. Transactional Outbox Pattern: 이벤트 발행의 원자성을 보장하기 위한 고민 ([MSA 전환을 위한 이벤트 기반 설계](/blog/groups/server/spring_boot/spring_boot_event_driven_design)에 정리했습니다.)
 > 2. Zero Class Dependency: 도메인 간의 클래스 의존성을 완전히 제거하여 독립성을 극대화하는 설계 <br/><br/>
 >
 > 이러한 주제들은 Gemini를 통한 탐구와 리팩토링 과정에서 얻은 소중한 인사이트들입니다.  

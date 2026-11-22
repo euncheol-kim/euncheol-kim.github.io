@@ -55,6 +55,8 @@ const PALETTE = {
 
 const DIMMED_ALPHA = 0.12;
 const REGION_PADDING = 30; // 영역의 가장자리와 가장 바깥 점 사이의 여백
+const NODE_GAP = 30; // 점과 점 사이에 두는 최소 간격. 화살표와 이름표가 들어갈 자리다
+const LINK_GAP = 16; // 선과, 그 선에 이어지지 않은 점 사이에 두는 최소 간격
 const REGION_GAP = 22; // 영역과 영역 사이에 두는 간격. 테두리에 걸친 이름표가 들어갈 자리다
 const MAX_LABEL_LENGTH = 20;
 const POST_LABEL_ZOOM = 1.7; // 이 배율 이상으로 확대하면 글 제목을 표시한다
@@ -247,12 +249,59 @@ const PostGraph = ({ graph, focusId: initialFocusId, isActive, className }: Prop
         });
       });
     };
+    // 서로 링크된 글은 당겨져 붙기 쉽다. 점끼리 최소 간격보다 가까워지면 서로 밀어낸다.
+    const separate = () => {
+      nodes.forEach((a, index) => {
+        nodes.slice(index + 1).forEach((b) => {
+          const dx = (b.x ?? 0) - (a.x ?? 0);
+          const dy = (b.y ?? 0) - (a.y ?? 0);
+          const distance = Math.hypot(dx, dy) || 1;
+          const minDistance = radiusOf(a) + radiusOf(b) + NODE_GAP;
+          if (distance >= minDistance) return;
+          const push = ((minDistance - distance) / distance) * 0.4;
+          a.vx = (a.vx ?? 0) - dx * push;
+          a.vy = (a.vy ?? 0) - dy * push;
+          b.vx = (b.vx ?? 0) + dx * push;
+          b.vy = (b.vy ?? 0) + dy * push;
+        });
+      });
+    };
+    separate.initialize = (initialNodes: SimNode[]) => {
+      nodes = initialNodes;
+    };
+    fg.d3Force('separate', separate as never);
+
+    // 선이 자신과 상관없는 점 위를 지나가면 그 점에 이어진 선처럼 보인다. 선에 너무 가까운 점은 옆으로 밀어낸다.
+    const avoidLinks = () => {
+      data.links.forEach(({ source, target }) => {
+        if (typeof source === 'string' || typeof target === 'string') return;
+        const [sx, sy, tx, ty] = [source.x ?? 0, source.y ?? 0, target.x ?? 0, target.y ?? 0];
+        const lengthSq = (tx - sx) ** 2 + (ty - sy) ** 2 || 1;
+        nodes.forEach((node) => {
+          if (node === source || node === target) return;
+          const [x, y] = [node.x ?? 0, node.y ?? 0];
+          // 선 위에서 점과 가장 가까운 자리. 양 끝 근처는 점끼리의 간격으로 이미 다루므로 뺀다.
+          const ratio = ((x - sx) * (tx - sx) + (y - sy) * (ty - sy)) / lengthSq;
+          if (ratio <= 0.05 || ratio >= 0.95) return;
+          const dx = x - (sx + (tx - sx) * ratio);
+          const dy = y - (sy + (ty - sy) * ratio);
+          const distance = Math.hypot(dx, dy) || 1;
+          const minDistance = radiusOf(node) + LINK_GAP;
+          if (distance >= minDistance) return;
+          const push = ((minDistance - distance) / distance) * 0.3;
+          node.vx = (node.vx ?? 0) + dx * push;
+          node.vy = (node.vy ?? 0) + dy * push;
+        });
+      });
+    };
+    fg.d3Force('avoidLinks', avoidLinks as never);
+
     gravity.initialize = (initialNodes: SimNode[]) => {
       nodes = initialNodes;
     };
     fg.d3Force('gravity', gravity as never);
     setIsForceReady(true);
-  }, [isReady, aspect]);
+  }, [isReady, aspect, radiusOf, data]);
 
   const select = useCallback(
     (id: string | null, duration = 500) => {

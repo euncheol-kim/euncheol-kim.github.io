@@ -95,6 +95,8 @@ Kotlin은 **"모든 프로퍼티는 객체 생성이 끝난 순간 유효한 값
 | `by lazy` | `val config by lazy { load() }` | 처음 읽을 때 한 번 계산한다 |
 | 커스텀 getter | `val isAdult get() = age >= 19` | 저장하지 않고 계산하므로 초기화가 필요 없다 |
 
+`by lazy`가 동작하는 원리는 [Kotlin의 by: 내 일을 다른 객체에게 맡기는 위임(Delegation)](/blog/groups/programming_language/kotlin/kotlin_by_delegation)에서 다뤘습니다.
+
 ### 3.1 초기화 식
 
 가장 많이 쓰는 방법입니다. 선언할 때 `=` 뒤에 붙이는 부분을 **초기화 식(Initializer)** 이라고 합니다.

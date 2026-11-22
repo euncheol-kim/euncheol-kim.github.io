@@ -150,7 +150,7 @@ custom.greet()    // 저는 기본입니다     ← "커스텀"이 아니다
 
 ### 3.1 개념
 
-Kotlin의 프로퍼티는 읽을 때 getter가, 쓸 때 setter가 호출됩니다. 프로퍼티 위임은 이 둘을 다른 객체에게 맡깁니다.
+Kotlin의 프로퍼티는 읽을 때 getter가, 쓸 때 setter가 호출됩니다. 프로퍼티 위임은 이 둘을 다른 객체에게 맡깁니다. getter와 setter가 만들어지는 규칙은 [Kotlin 프로퍼티에는 기본값이 없다: 초기화 규칙과 Backing Field](/blog/groups/programming_language/kotlin/kotlin_property_initialization)에서 다뤘습니다.
 
 ```kotlin
 val 이름: 타입 by 위임객체

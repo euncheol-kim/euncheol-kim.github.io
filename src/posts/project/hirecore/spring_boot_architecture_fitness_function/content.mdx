@@ -41,7 +41,7 @@ Java의 언어적 특성에 따른 아키텍처 구축의 한계를 가상의 �
 >            - Lev 0: Bounded Context (Vertical Slicing)
 >            - Lev 1: Horizontal Slicing (adapter, application, domain)
 >        (2) 특징
->            - Bounded Context: 연관도가 높은 비즈니스 기능 집합이며 한 개 이상의 Aggregate Root를 가질 수 있습니다.
+>            - Bounded Context: 연관도가 높은 비즈니스 기능 집합이며 한 개 이상의 Aggregate Root를 가질 수 있습니다. 경계를 나누는 기준은 [Bounded Context(BC): 기능이 아니라 모델의 경계를 나눈다](/blog/groups/cs/architecture/bounded_context)에서 다뤘습니다.
 >            - Horizontal Slicing: 계층구조를 따라 코드를 분리합니다.
 >
 >    2. 내부 Bounded Context는 외부의 Bounded Context를 의존하지 않습니다.

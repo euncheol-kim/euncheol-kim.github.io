@@ -14,7 +14,7 @@ tags: Python, Fast API, SQLAlchemy, Sign Up, Relationship
 
 2. 기술 스택
     - DB: MySQL, 
-    - ORM: SQLAlchemy2.0
+    - ORM: SQLAlchemy2.0 ([SQLAlchemy2.0 동작 메커니즘의 이해를 위한 기초 학습 정리](/blog/groups/server/SQLAlchemy/SQLAlchemy_concept))
 
 # 1. Fast API(python.14) 회원가입 구현
 ## [1-1] 회원가입 처리 과정
@@ -84,7 +84,7 @@ class Todo(Base):
 
     - 
         **relationship(...) (가상 속성 선언)**
-        : 이 속성은 실제 DB 테이블의 컬럼으로 만들어지지 않는다. SQLAlchemy가 런타임에 두 테이블을 조언(Join)하여 파이썬 객체로 조립해 주기 위해 사용하는 ORM 전용 설정이다.
+        : 이 속성은 실제 DB 테이블의 컬럼으로 만들어지지 않는다. SQLAlchemy가 런타임에 두 테이블을 조언(Join)하여 파이썬 객체로 조립해 주기 위해 사용하는 ORM 전용 설정이다. 관계 설정 전반은 [JPA 개발자를 위한 SQLAlchemy 2.0 객체 관계](/blog/groups/server/SQLAlchemy/sqlalchemy_multiplicity)에 정리했다.
 
     -
         **back_populates="todos" (양방향 메모리 동기화)**

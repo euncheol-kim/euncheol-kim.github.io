@@ -10,7 +10,7 @@ tags: Python, Fast API, APIRouter
 
 # 라우터 구조화(Router Structuring)
 <b>라우터(Router)</b>란, 웹 애플리케이션에서 여러 API를 기능별로 구분해 한곳에 모아 두기 위한 단위이다.
-라우터를 사용하면 서로 관련된 API 엔드포인트들을 하나의 모듈로 묶을 수 있어 코드를 기능 단위로 정리하고 관리하기 수월하다. 
+라우터를 사용하면 서로 관련된 API 엔드포인트들을 하나의 모듈로 묶을 수 있어 코드를 기능 단위로 정리하고 관리하기 수월하다. FastAPI의 기본 동작은 [Fast API(python 3.14) 동작 메커니즘의 이해를 위한 기초 학습 정리](/blog/groups/server/fast_api/fast_api_concept)에 정리했다.
 
 <b>라우팅(Routing)</b>은 클라이언트로부터 들어온 요청(HTTP 메소드 + URL 경로)을 어떤 함수가 처리할지 연결하는 과정이다. 예를 들어 GET /tods 요청은 전체 할 일을 조회하는 함수로, POST /users 요청은 사용자를 생성하는 함수로 각각 연결되며, 이러한 연결 과정을 관리하는 역할을 라우터가 한다.
 

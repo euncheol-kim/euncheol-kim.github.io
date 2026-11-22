@@ -358,7 +358,7 @@ new Milk(new Americano());              // 우유만: 3500
 
 Decorator는 자기가 바꾸지 않는 메서드도 전부 안쪽 객체에게 전달해 줘야 합니다. 인터페이스의 메서드가 10개인데 그중 1개만 바꾸고 싶어도, 나머지 9개에 대해 "그대로 넘긴다"는 코드를 써야 합니다.
 
-Kotlin은 `by` 키워드로 이 전달 코드를 자동으로 만들어 줍니다.
+Kotlin은 `by` 키워드로 이 전달 코드를 자동으로 만들어 줍니다. `by`의 동작은 [Kotlin의 by: 내 일을 다른 객체에게 맡기는 위임(Delegation)](/blog/groups/programming_language/kotlin/kotlin_by_delegation)에서 자세히 다뤘습니다.
 
 ```kotlin
 class Shot(private val coffee: Coffee) : Coffee by coffee {

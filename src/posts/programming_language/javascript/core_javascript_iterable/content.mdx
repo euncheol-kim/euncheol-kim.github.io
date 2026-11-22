@@ -27,7 +27,7 @@ Javascript 객체의 `반복`에 대해서 다시 이야기 해보고자 한다.
 ### 1-1. 일반적인 객체는 왜 `for of`를 사용하지 못하는가?
 Javascript의 약속된 규칙인 <b>`이터레이션 프로토콜`(interation Protocol)</b>을 따르는 객체만 순회할 수 있다. 
 
-`for of`가 실행되면, 엔진은 가장 먼저 그 객체 안에 `[Symbol.iterator]`라는 특수한 메서드가 있는지 확인한다. `배열`, `문자열`, `Map` `Set`등은 이 메서드를 기본적으로 내장(Built-in)하고 있다.
+`for of`가 실행되면, 엔진은 가장 먼저 그 객체 안에 `[Symbol.iterator]`라는 특수한 메서드가 있는지 확인한다. `배열`, `문자열`, `Map` `Set`등은 이 메서드를 기본적으로 내장(Built-in)하고 있다. 각 자료구조는 [배열 정리](/blog/groups/programming_language/javascript/core_javascript_array), [문자열 정리](/blog/groups/programming_language/javascript/core_javascript_string), [Map과 Set 정리](/blog/groups/programming_language/javascript/core_javascript_map_and_set)에서 다뤘다.
 반면, 일반 객체 <font color="steelblue"><b><u>`{...}`의 내부 구조를 보면 이 메서드가 없다.</u></b></font>
 
 Javascript의 철학에 따르면 <b>배열</b>은 데이터에 순서가 생명인 자료구조이며, <b>객체</b>는 순서와 관계없이 키와 값의 연결 관계가 본질적인 자료구조로 정의하고 있기 때문이다.
