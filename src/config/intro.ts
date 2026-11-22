@@ -5,7 +5,7 @@ import { techIcons } from '@/config/tech-icons';
 export const blogIntro = {
   // 띠에 항상 보이는 이름과 한 문장. 문장이 길면 한 줄에서 잘린다.
   label: 'About me',
-  summary: '프로젝트를 구현하며 치열하게 고민한 흔적들',
+  summary: '프로젝트를 구현하며 치열하게 고민한 흔적을 글로 남깁니다.',
   greeting: '안녕하세요 👋',
   profileImage: '/profile.webp',
   email: 'kimeuncheol@kakao.com',
