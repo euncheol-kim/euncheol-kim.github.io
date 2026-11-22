@@ -56,6 +56,7 @@ const PALETTE = {
 const DIMMED_ALPHA = 0.12;
 const REGION_PADDING = 30; // 영역의 가장자리와 가장 바깥 점 사이의 여백
 const NODE_GAP = 30; // 점과 점 사이에 두는 최소 간격. 화살표와 이름표가 들어갈 자리다
+const CATEGORY_GAP = 70; // 카테고리 점끼리 두는 최소 간격
 const LINK_GAP = 16; // 선과, 그 선에 이어지지 않은 점 사이에 두는 최소 간격
 const REGION_GAP = 22; // 영역과 영역 사이에 두는 간격. 테두리에 걸친 이름표가 들어갈 자리다
 const MAX_LABEL_LENGTH = 20;
@@ -256,7 +257,9 @@ const PostGraph = ({ graph, focusId: initialFocusId, isActive, className }: Prop
           const dx = (b.x ?? 0) - (a.x ?? 0);
           const dy = (b.y ?? 0) - (a.y ?? 0);
           const distance = Math.hypot(dx, dy) || 1;
-          const minDistance = radiusOf(a) + radiusOf(b) + NODE_GAP;
+          // 카테고리 점은 이름이 늘 표시되므로, 이름표가 겹치지 않게 서로 더 멀리 둔다.
+          const gap = a.type === 'category' && b.type === 'category' ? CATEGORY_GAP : NODE_GAP;
+          const minDistance = radiusOf(a) + radiusOf(b) + gap;
           if (distance >= minDistance) return;
           const push = ((minDistance - distance) / distance) * 0.4;
           a.vx = (a.vx ?? 0) - dx * push;
@@ -402,8 +405,6 @@ const PostGraph = ({ graph, focusId: initialFocusId, isActive, className }: Prop
   const drawLabels = useCallback(
     (ctx: CanvasRenderingContext2D, globalScale: number) => {
       type Box = { left: number; top: number; right: number; bottom: number; owner?: string };
-      const overlaps = (a: Box, b: Box) =>
-        a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
 
       const placed = allNodes.filter((node) => node.x !== undefined && node.y !== undefined);
       // 강조 중인 점 > 카테고리와 태그 > 큰 글(연결이 많은 글) 순으로 자리를 준다.
@@ -481,26 +482,41 @@ const PostGraph = ({ graph, focusId: initialFocusId, isActive, className }: Prop
         const halfWidth = ctx.measureText(label).width / 2 + gap;
         const height = fontSize * 1.25;
         const radius = radiusOf(node);
-        // 점 아래에 먼저 놓아 보고, 자리가 없으면 점 위에 놓는다.
-        const tops = [node.y! + radius + gap, node.y! - radius - gap - height];
-        const boxes = tops.map((top) => ({
-          left: node.x! - halfWidth,
-          top,
-          right: node.x! + halfWidth,
-          bottom: top + height,
+        // 점의 아래, 위, 오른쪽, 왼쪽 순으로 놓아 보고 비어 있는 첫 자리를 쓴다.
+        const side = radius + gap + halfWidth;
+        const centers = [
+          { x: node.x!, y: node.y! + radius + gap + height / 2 },
+          { x: node.x!, y: node.y! - radius - gap - height / 2 },
+          { x: node.x! + side, y: node.y! },
+          { x: node.x! - side, y: node.y! },
+        ];
+        const boxes = centers.map(({ x, y }) => ({
+          left: x - halfWidth,
+          top: y - height / 2,
+          right: x + halfWidth,
+          bottom: y + height / 2,
         }));
-        const isFree = (box: Box) =>
-          taken.every((other) => other.owner === node.id || !overlaps(box, other));
-        // 강조 중인 점과 카테고리의 이름은 자리가 없어도 반드시 표시한다.
-        const box = boxes.find(isFree) ?? (isFocus || node.type === 'category' ? boxes[0] : undefined);
+        const others = taken.filter((other) => other.owner !== node.id);
+        const overlapArea = (box: Box) =>
+          others.reduce((sum, other) => {
+            const width = Math.min(box.right, other.right) - Math.max(box.left, other.left);
+            const tall = Math.min(box.bottom, other.bottom) - Math.max(box.top, other.top);
+            return width > 0 && tall > 0 ? sum + width * tall : sum;
+          }, 0);
+        const areas = boxes.map(overlapArea);
+        // 강조 중인 점과 카테고리의 이름은 반드시 표시한다. 빈 자리가 없으면 가장 덜 겹치는 자리에 놓는다.
+        const isForced = isFocus || node.type === 'category';
+        const best = areas.indexOf(isForced ? Math.min(...areas) : 0);
+        const box = boxes[best];
         if (!box) return;
         taken.push(box);
 
         // 선 위에서도 읽히도록 글자 뒤에 배경색 외곽선을 깐다.
+        const centerX = (box.left + box.right) / 2;
         ctx.strokeStyle = colors.surface;
-        ctx.strokeText(label, node.x!, box.top);
+        ctx.strokeText(label, centerX, box.top);
         ctx.fillStyle = colors.text;
-        ctx.fillText(label, node.x!, box.top);
+        ctx.fillText(label, centerX, box.top);
       });
     },
     [allNodes, groupLabelOf, colors, focusId, matched, isHighlighted, radiusOf]
