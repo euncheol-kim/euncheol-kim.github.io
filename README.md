@@ -33,3 +33,17 @@ Next.js 로 구축한 개발 블로그 소스코드입니다.
     - windows 환경에서만 위 에러가 발생하기 때문에 mac os 사용을 권장합니다.
     - 배포 환경에서는 에러가 발생하지 않습니다.
   
+
+---
+
+### 로컬 실행
+
+```bash
+npm install
+npm run dev
+```
+
+- `npm run dev` : 이미지 변환·썸네일 정리 후 개발 서버 실행 (http://localhost:3000)
+- `npm run build` : 정적 사이트를 `out/` 에 생성
+- `npm run thumbnails` : 썸네일만 다시 정리
+- `npm run lint` : ESLint 검사
